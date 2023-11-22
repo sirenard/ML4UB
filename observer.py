@@ -4,26 +4,48 @@ import ecole
 import numpy as np
 from itertools import repeat
 
+import pyscipopt
+
 from environments import HistoryBranchingEnvironment
 
 
 class UnrealisticObserver:
-    def __init__(self, n_repetitions, n_cpus):
+    def __init__(self, n_repetitions, n_cpus, expert_probability=1, seed=None, scip_params={}):
         self.seed = 0
         self.instance_path = None
         self.action_history = []
         self.n_repetitions = n_repetitions
         self.n_cpus = n_cpus
+        self.expert_probability = expert_probability
+        self.rng = np.random.default_rng(seed)
+        self.pseudocosts_function = ecole.observation.Pseudocosts()
+        self.scip_params = scip_params
 
     def extract(self, model, done):
-        n_actions = len(model.as_pyscipopt().getLPBranchCands()[0])
+        is_expert = self.rng.random() <= self.expert_probability
+        if is_expert:
+            scores = - self.extract_expert(model)
+        else:
+            scores = self.pseudocosts_function.extract(model, done)
+            scores = np.array(scores)
 
-        args = zip(
+        return scores, is_expert
+
+    def extract_expert(self, model):
+        m:pyscipopt.Model = model.as_pyscipopt()
+        candidates, *_ = m.getLPBranchCands()
+        n_actions = len(candidates)
+        n_vars = int(m.getNVars())
+
+        prob_indexes = sorted([var.getCol().getLPPos() for var in candidates])
+
+        args = list(zip(
             list(range(n_actions))*self.n_repetitions,
             repeat(self.action_history),
             [self.seed + j for _ in range(n_actions) for j in range(self.n_repetitions)],
             repeat(self.instance_path),
-        )
+            repeat(self.scip_params)
+        ))
 
         with Pool(self.n_cpus) as pool:
             res = pool.starmap(self.get_score, args)
@@ -32,18 +54,14 @@ class UnrealisticObserver:
         res = np.array(res).reshape(self.n_repetitions, n_actions)
         scores = res.min(axis=0)
 
-
-        #scores = np.array([self.get_score(i, self.action_history[:], self.seed, self.instance_path, self.n_repetitions) for i in range(n_actions)])
-        # scores = []
-        # for i in range(n_actions):
-        #     score = self.get_score(i, self.action_history[:], self.seed, self.instance_path, self.n_repetitions)
-        #     scores.append(score)
-        # scores = np.array(scores)
-
-        return scores
+        res = np.zeros(n_vars)
+        res[:] = np.nan
+        res[prob_indexes] = scores
+        return res
 
     def before_reset(self, model):
-        pass
+        self.pseudocosts_function.before_reset(model)
+
     def reset(self, instance_path, seed):
         self.action_history = []
         self.instance_path = instance_path
@@ -53,11 +71,12 @@ class UnrealisticObserver:
         self.action_history.append(action)
 
     @staticmethod
-    def get_score(action_index, action_history, seed, instance_path):
+    def get_score(action_index, action_history, seed, instance_path, scip_params):
         env = HistoryBranchingEnvironment(
             information_function={
                 "nb_nodes": ecole.reward.NNodes()
-            }
+            },
+            scip_params=scip_params
         )
 
         rng = np.random.default_rng(seed)
@@ -91,3 +110,33 @@ class UnrealisticObserver:
         return nb_nodes
 
 
+
+
+class ExploreThenStrongBranch:
+    """
+    This custom observation function class will randomly return either strong branching scores (expensive expert)
+    or pseudocost scores (weak expert for exploration) when called at every node.
+    """
+
+    def __init__(self, expert_probability):
+        self.expert_probability = expert_probability
+        self.pseudocosts_function = ecole.observation.Pseudocosts()
+        self.strong_branching_function = ecole.observation.StrongBranchingScores()
+
+    def before_reset(self, model):
+        """
+        This function will be called at initialization of the environment (before dynamics are reset).
+        """
+        self.pseudocosts_function.before_reset(model)
+        self.strong_branching_function.before_reset(model)
+
+    def extract(self, model, done):
+        """
+        Should we return strong branching or pseudocost scores at time node?
+        """
+        probabilities = [1 - self.expert_probability, self.expert_probability]
+        expert_chosen = bool(np.random.choice(np.arange(2), p=probabilities))
+        if expert_chosen:
+            return (self.strong_branching_function.extract(model, done), True)
+        else:
+            return (self.pseudocosts_function.extract(model, done), False)
