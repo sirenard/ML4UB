@@ -1,19 +1,19 @@
 import time
 import ecole
 import pyscipopt
+from mpipool import MPIPool
 
 import utils
 from bpp import BinpackingGenerator
 from environments import HistoryBranchingEnvironment, SimpleConfiguring
 from observer import UnrealisticObserver
 
-n_instances = 10
+n_instances = 1
 n_repetitions = 20
-n_cpus = 4
 
 policies = ["UB", "vanillafullstrong", "relpscost", "pscost", "random"]
 
-if __name__ == "__main__":
+def main(pool: MPIPool = None):
     n_objects = 20
     bin_capacity = 100
     weight_bounds = (20, 22)
@@ -30,10 +30,10 @@ if __name__ == "__main__":
 
     observer = UnrealisticObserver(
         n_repetitions,
-        n_cpus,
         scip_params={
             "limits/nodes": 2000
-        }
+        },
+        pool=pool
     )
     env = HistoryBranchingEnvironment(
         observation_function=(
@@ -113,3 +113,8 @@ if __name__ == "__main__":
         print(f"{policy}: {score}")
 
 
+if __name__ == "__main__":
+    t = time.time()
+    utils.mpi_start(main)
+    t = time.time() - t
+    print(f"Runned in {round(t,2)} s")

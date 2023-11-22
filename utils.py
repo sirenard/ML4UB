@@ -1,5 +1,6 @@
 import sys
-
+from mpipool import MPIPool
+from mpi4py import MPI
 import ecole
 
 import pyscipopt
@@ -33,7 +34,7 @@ def get_ecole_model_from_file(path):
 def configure(model: pyscipopt.Model, branching_policy="vanillafullstrong"):
     model.setPresolve(PY_SCIP_PARAMSETTING.OFF)
     model.setSeparating(PY_SCIP_PARAMSETTING.OFF)
-    #model.setHeuristics(PY_SCIP_PARAMSETTING.OFF)
+    # model.setHeuristics(PY_SCIP_PARAMSETTING.OFF)
 
     model.setParam("randomization/permutevars", False)
     model.setParam("randomization/lpseed", 1)
@@ -46,6 +47,7 @@ def configure(model: pyscipopt.Model, branching_policy="vanillafullstrong"):
 
     model.setParam(f"branching/{branching_policy}/priority", 9999999)
 
+
 def solve(model: pyscipopt.Model):
     model.optimize()
     nnodes = model.getNNodes()
@@ -53,3 +55,11 @@ def solve(model: pyscipopt.Model):
     return nnodes, obj
 
 
+def mpi_start(f, *args, **kwargs):
+    n_mpi = MPI.COMM_WORLD.Get_size()
+    if n_mpi > 1:
+        with MPIPool() as pool:
+            pool.workers_exit()
+            f(pool, *args, **kwargs)
+    else:
+        f(*args, **kwargs)

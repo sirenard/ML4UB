@@ -1,4 +1,4 @@
-from multiprocessing import Pool
+from mpipool import MPIPool
 
 import ecole
 import numpy as np
@@ -10,16 +10,16 @@ from environments import HistoryBranchingEnvironment
 
 
 class UnrealisticObserver:
-    def __init__(self, n_repetitions, n_cpus, expert_probability=1, seed=None, scip_params={}):
+    def __init__(self, n_repetitions, expert_probability=1, seed=None, scip_params={}, pool: MPIPool = None):
         self.seed = 0
         self.instance_path = None
         self.action_history = []
         self.n_repetitions = n_repetitions
-        self.n_cpus = n_cpus
         self.expert_probability = expert_probability
         self.rng = np.random.default_rng(seed)
         self.pseudocosts_function = ecole.observation.Pseudocosts()
         self.scip_params = scip_params
+        self.pool: MPIPool = pool
 
     def extract(self, model, done):
         is_expert = self.rng.random() <= self.expert_probability
@@ -47,9 +47,10 @@ class UnrealisticObserver:
             repeat(self.scip_params)
         ))
 
-        with Pool(self.n_cpus) as pool:
-            res = pool.starmap(self.get_score, args)
-        #res = [self.get_score(*arg) for arg in args]
+        if self.pool:
+            res = self.pool.starmap(self.get_score, args)
+        else:
+            res = [self.get_score(*arg) for arg in args]
 
         res = np.array(res).reshape(self.n_repetitions, n_actions)
         scores = res.min(axis=0)
