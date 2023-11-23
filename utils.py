@@ -60,6 +60,9 @@ def mpi_start(f, *args, **kwargs):
     if n_mpi > 1:
         with MPIPool() as pool:
             pool.workers_exit()
+            print(f"{n_mpi} workers")
             f(pool, *args, **kwargs)
     else:
         f(*args, **kwargs)
+        print("1 worker")
+
