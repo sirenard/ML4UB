@@ -10,6 +10,9 @@ from dataset import get_sample_files
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+def get_device():
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 class BipartiteNodeData(torch_geometric.data.Data):
     """
     This class encode a node bipartite graph observation as returned by the `ecole.observation.NodeBipartite`

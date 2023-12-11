@@ -11,7 +11,7 @@ from observer import UnrealisticObserver
 n_instances = 1
 n_repetitions = 20
 
-policies = ["UB", "vanillafullstrong", "relpscost", "pscost", "random"]
+policies = ["UB", "vanillafullstrong"]
 
 def main(pool: MPIPool = None):
     n_objects = 20
