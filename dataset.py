@@ -7,11 +7,14 @@ from environments import HistoryBranchingEnvironment
 from observer import UnrealisticObserver, ExploreThenStrongBranch
 
 
-def data_generation(instances, data_max_samples, folder_name = "samples", scip_params={}, **kwargs):
+def data_generation(instances, data_max_samples, folder_name = "samples", scip_params_env={}, **kwargs):
     episode_counter, sample_counter = 0, 0
     Path("{}/".format(folder_name)).mkdir(exist_ok=True)
 
-    observer = UnrealisticObserver(scip_params=scip_params, **kwargs)
+    for i in range(episode_counter):
+        n = next(instances)
+
+    observer = UnrealisticObserver(**kwargs)
     env = HistoryBranchingEnvironment(
         observation_function=(
             #ExploreThenStrongBranch(**kwargs),
@@ -22,7 +25,7 @@ def data_generation(instances, data_max_samples, folder_name = "samples", scip_p
             "nb_nodes": ecole.reward.NNodes(),
             "time": ecole.reward.SolvingTime(),
         },
-        scip_params=scip_params
+        scip_params=scip_params_env
     )
 
     # We will solve problems (run episodes) until we have saved enough samples

@@ -8,30 +8,29 @@ from bpp import BinpackingGenerator
 from environments import HistoryBranchingEnvironment, SimpleConfiguring
 from observer import UnrealisticObserver
 
-n_instances = 1
+n_instances = 20
 n_repetitions = 20
 
-policies = ["UB", "vanillafullstrong", "relpscost", "pscost", "random"]
+policies = ["UB", "relpscost", "vanillafullstrong"]
 
 def main(pool: MPIPool = None):
-    n_objects = 20
+    n_objects = 45
     bin_capacity = 100
-    weight_bounds = (20, 22)
-    #instances = binpackingGenerator(0, n_objects, bin_capacity, weight_bounds)
+    weight_bounds = (20, 60)
     instances = BinpackingGenerator(n_objects, bin_capacity, weight_bounds)
-    instances.seed(0)
+    #instances = ecole.instance.SetCoverGenerator(n_rows=500, n_cols=1000, density=0.05)
 
-    #instances = ecole.instance.SetCoverGenerator(n_rows=200, n_cols=400, density=0.05)
+    #instances = ecole.instance.SetCoverGenerator(n_rows=250, n_cols=500, density=0.05)
     #instances = ecole.instance.CombinatorialAuctionGenerator(n_items=50, n_bids=150)
     #instances = ecole.instance.IndependentSetGenerator(n_nodes=200)
-    #instances = ecole.instance.CapacitatedFacilityLocationGenerator(n_customers=15, n_facilities=15)
+    #instances = ecole.instance.CapacitatedFacilityLocationGenerator(n_customers=100, n_facilities=100)
 
-    #instances.seed(0)
+    instances.seed(0)
 
     observer = UnrealisticObserver(
         n_repetitions,
         scip_params={
-            "limits/nodes": 2000
+            "limits/nodes": 100
         },
         pool=pool
     )
@@ -61,6 +60,7 @@ def main(pool: MPIPool = None):
     output_control = utils.OutputControl()
 
     for i, instance in zip(range(n_instances), instances):
+        print("*"*12)
         print(f"instance {i+1}/{n_instances}")
 
         output_control.mute()
