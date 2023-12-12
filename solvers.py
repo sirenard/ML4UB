@@ -130,14 +130,14 @@ class UBSolver(EcoleSolver):
 
 
 class GnnSolver(EcoleSolver):
-    def __init__(self, policy_path):
+    def __init__(self, policy_path, scip_params={}):
         env = HistoryBranchingEnvironment(
             observation_function=ecole.observation.NodeBipartite(),
             information_function={
                 "nb_nodes": ecole.reward.NNodes(),
                 "time": ecole.reward.SolvingTime(),
             },
-            scip_params={},
+            scip_params=scip_params,
         )
         self.policy = load_policy(policy_path)
         self.policy_path = policy_path
@@ -162,11 +162,13 @@ class GnnSolver(EcoleSolver):
 
 
 class ClassicSolver(Solver):
-    def __init__(self, branching_policy):
+    def __init__(self, branching_policy, scip_params={}):
         super().__init__()
         self.model = pyscipopt.Model()
         self.branching_policy = branching_policy
         utils.configure(self.model, branching_policy=branching_policy)
+
+        self.model.setParams(scip_params)
 
     def solve(self, path: str):
         self.model.readProblem(path)
@@ -201,14 +203,17 @@ class DatasetGenerator:
         self.solver.set_before_action_callbacks([before_action])
 
         while self.sample_counter < max_samples:
-            instance = next(self.instances)
-            m = instance.as_pyscipopt()
-            m.setParam("display/verblevel", 0)
-            m.writeProblem("prob.lp")
-            self.solver.solve("prob.lp")
+            try:
+                instance = next(self.instances)
+                self.episode_counter += 1
+                m = instance.as_pyscipopt()
+                m.setParam("display/verblevel", 0)
+                m.writeProblem("prob.lp")
+                self.solver.solve("prob.lp")
 
-            print(f"Episode {self.episode_counter}, {self.sample_counter} samples collected so far")
-            self.episode_counter += 1
+                print(f"Episode {self.episode_counter}, {self.sample_counter} samples collected so far")
+            except:
+                print(f"Crash on episode {self.episode_counter}")
 
 
 if __name__ == "__main__":

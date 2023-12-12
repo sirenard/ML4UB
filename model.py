@@ -373,31 +373,3 @@ def evaluate(instances, n_instances, env, default_env, policy):
 
 
 
-def train_rl(instances, n_instances, env, default_env):
-    policy = GNNPolicy().to(DEVICE)
-
-    for instance_count, instance in zip(range(n_instances), instances):
-        # Run the GNN brancher
-        nb_nodes, time = 0, 0
-        observation, action_set, _, done, info = env.reset(instance)
-        nb_nodes += info["nb_nodes"]
-        time += info["time"]
-
-        while not done:
-            with torch.no_grad():
-                observation = (
-                    torch.from_numpy(observation.row_features.astype(np.float32)).to(DEVICE),
-                    torch.from_numpy(observation.edge_features.indices.astype(np.int64)).to(DEVICE),
-                    torch.from_numpy(observation.edge_features.values.astype(np.float32)).view(-1, 1).to(DEVICE),
-                    torch.from_numpy(observation.variable_features.astype(np.float32)).to(DEVICE),
-                )
-                logits = policy(*observation)
-                action = action_set[logits[action_set.astype(np.int64)].argmax()]
-                observation, action_set, _, done, info = env.step(action)
-            nb_nodes += info["nb_nodes"]
-            time += info["time"]
-
-        # Run SCIP's default brancher
-        default_env.reset(instance)
-        _, _, _, _, default_info = default_env.step({})
-
