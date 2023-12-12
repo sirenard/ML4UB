@@ -6,6 +6,7 @@ from itertools import repeat
 
 import pyscipopt
 
+import reward
 from environments import HistoryBranchingEnvironment
 
 
@@ -75,7 +76,8 @@ class UnrealisticObserver:
     def get_score(action_index, action_history, seed, instance_path, scip_params):
         env = HistoryBranchingEnvironment(
             information_function={
-                "nb_nodes": ecole.reward.NNodes()
+                "nb_nodes": ecole.reward.NNodes(),
+                "gap": reward.gapReward()
             },
             scip_params=scip_params
         )
@@ -108,7 +110,9 @@ class UnrealisticObserver:
             observation, action_set, _, done, info = env.step(action)
             nb_nodes += info["nb_nodes"]
 
-        return nb_nodes
+        gap = info["gap"]
+        return (1+gap) * nb_nodes
+        #return nb_nodes
 
 
 
