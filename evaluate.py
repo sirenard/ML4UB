@@ -1,8 +1,12 @@
 import ecole.instance
 
 from evaluation_tools import evaluate_solvers
+from model import train
 from solvers import *
 import numpy as np
+
+from uc import UcigGenerator
+
 
 def main(pool: MPIPool = None):
     # Easy parameters
@@ -16,22 +20,26 @@ def main(pool: MPIPool = None):
 
     #instances = BinpackingGenerator(n_objects, bin_capacity, weight_bounds)
 
-    instances = ecole.instance.SetCoverGenerator(n_rows=400, n_cols=800)
+    #instances = ecole.instance.SetCoverGenerator(n_rows=400, n_cols=800)
 
-    instances.seed(0)
+    instances = UcigGenerator("instances", start_at_instance=1000)
+    #instances.seed(0)
 
     n_instances = 20
 
     scip_params = {
-        "limits/nodes": 100000,
+        "limits/nodes": 20,
     }
 
+    #policy = train("sb_uc_5", 0.001, 20, "sb_uc_5.pkl")
+
+
     solvers = [
-        #UBSolver(20, pool=pool),
-        #ClassicSolver("vanillafullstrong", scip_params),
-        #ClassicSolver("relpscost", scip_params),
-        ClassicSolver("random", scip_params),
-        #GnnSolver("agent_ub_bpp.pkl", scip_params),
+        ClassicSolver("vanillafullstrong", scip_params),
+        ClassicSolver("relpscost", scip_params),
+        UBSolver(20, scip_params_env=scip_params, scip_params={"limits/nodes": 100}, pool=pool),
+        #ClassicSolver("random", scip_params),
+        #GnnSolver("sb_uc_5.pkl", scip_params),
     ]
 
 

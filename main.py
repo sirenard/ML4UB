@@ -7,19 +7,21 @@ import utils
 from bpp import BinpackingGenerator
 from environments import HistoryBranchingEnvironment, SimpleConfiguring
 from observer import UnrealisticObserver
+from uc import UcigGenerator
 
-n_instances = 1
+n_instances = 10
 n_repetitions = 20
 
-policies = ["UB", "vanillafullstrong"]
+policies = ["UB", "vanillafullstrong", "relpscost"]
 
 def main(pool: MPIPool = None):
     n_objects = 20
     bin_capacity = 100
     weight_bounds = (20, 22)
     #instances = binpackingGenerator(0, n_objects, bin_capacity, weight_bounds)
-    instances = BinpackingGenerator(n_objects, bin_capacity, weight_bounds)
-    instances.seed(0)
+    #instances = BinpackingGenerator(n_objects, bin_capacity, weight_bounds)
+    instances = UcigGenerator("/home/simon/Téléchargements/ucig/instances")
+    #instances.seed(0)
 
     #instances = ecole.instance.SetCoverGenerator(n_rows=200, n_cols=400, density=0.05)
     #instances = ecole.instance.CombinatorialAuctionGenerator(n_items=50, n_bids=150)

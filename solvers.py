@@ -15,7 +15,7 @@ import utils
 from bpp import BinpackingGenerator
 from environments import HistoryBranchingEnvironment, SimpleBranching, SimpleConfiguring
 from model import load_policy
-from observer import UnrealisticObserver
+from observer import UnrealisticObserver, ExploreThenStrongBranch
 from utils import get_ecole_model_from_file
 
 
@@ -114,19 +114,43 @@ class UBSolver(EcoleSolver):
             },
             scip_params=scip_params_env,
         )
-
+        self.count=0
         super().__init__(env)
 
     def before_action(self, action, action_set, observation):
         super().before_action(action, action_set, observation)
         self.observer.step(action)
+        self.count+=1
+
 
     def before_start(self, path):
         super().before_start(path)
+        self.count=0
         self.observer.reset(path, 0)
 
     def __str__(self):
         return "UB"
+
+
+class SBSolver(EcoleSolver):
+    def __init__(self, expert_probability=1.0, scip_params={}, additional_observers=[]):
+        env = HistoryBranchingEnvironment(
+            observation_function=(
+                ExploreThenStrongBranch(expert_probability),
+                *additional_observers
+            ),
+            information_function={
+                "nb_nodes": ecole.reward.NNodes(),
+                "time": ecole.reward.SolvingTime(),
+            },
+            scip_params=scip_params,
+        )
+
+        self.rep = f"SB({expert_probability})"
+        super().__init__(env)
+
+    def __repr__(self):
+        return self.rep
 
 
 class GnnSolver(EcoleSolver):
@@ -176,6 +200,8 @@ class ClassicSolver(Solver):
 
     def __str__(self):
         return self.branching_policy
+
+
 class DatasetGenerator:
     def __init__(self, instances, solver: EcoleSolver, sample_counter=0, episode_counter=0):
         self.solver = solver
