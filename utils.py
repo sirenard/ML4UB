@@ -1,5 +1,5 @@
 import sys
-from mpipool import MPIPool
+from mpi import MpiPool
 from mpi4py import MPI
 import ecole
 
@@ -57,12 +57,7 @@ def solve(model: pyscipopt.Model):
 
 def mpi_start(f, *args, **kwargs):
     n_mpi = MPI.COMM_WORLD.Get_size()
-    if n_mpi > 1:
-        with MPIPool() as pool:
-            pool.workers_exit()
+    with MpiPool() as pool:
+        if pool is not None:
             print(f"{n_mpi} workers")
             f(pool, *args, **kwargs)
-    else:
-        f(*args, **kwargs)
-        print("1 worker")
-
