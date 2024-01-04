@@ -36,7 +36,7 @@ def evaluate_solvers(solvers: [Solver], instances, n_instances, metrics):
         instance.as_pyscipopt().writeProblem("prob.lp")
         output_control.unmute()
 
-        print(f"{i:^15}", end="")
+        print(f"{i:<15}", end="")
         for j, solver in enumerate(solvers):
             solver.solve("prob.lp")
             line = [solver[metric] for metric in metrics]

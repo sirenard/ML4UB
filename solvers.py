@@ -15,7 +15,7 @@ import utils
 from bpp import BinpackingGenerator
 from environments import HistoryBranchingEnvironment, SimpleBranching, SimpleConfiguring
 from model import load_policy
-from observer import UnrealisticObserver, ExploreThenStrongBranch
+from observer import UnrealisticObserver, ExploreThenStrongBranch, ConditionalObservers
 from utils import get_ecole_model_from_file
 
 
@@ -25,6 +25,9 @@ class Solver:
 
     def solve(self, path: str):
         raise NotImplementedError
+
+    def configure(self):
+        return
 
     def __getitem__(self, item):
         match item:
@@ -71,7 +74,10 @@ class EcoleSolver(Solver):
             action = self.get_action(action_set, observation)
             self.before_action(action, action_set, observation)
             observation, action_set, _, done, info = self.env.step(action)
+            self.model = self.env.model.as_pyscipopt()
             nb_nodes += info["nb_nodes"]
+            if not done:
+                done = self.after_action()
 
         t = time.time() - t
 
@@ -84,6 +90,9 @@ class EcoleSolver(Solver):
 
     def before_action(self, action, action_set, observation):
         return [f(action, action_set, observation) for f in self.before_action_callbacks]
+
+    def after_action(self):
+        return False
 
     def get_action(self, action_set, observation) -> int:
         ub_scores, _ = observation[0]
@@ -114,18 +123,17 @@ class UBSolver(EcoleSolver):
             },
             scip_params=scip_params_env,
         )
-        self.count=0
+        self.count = 0
         super().__init__(env)
 
     def before_action(self, action, action_set, observation):
         super().before_action(action, action_set, observation)
         self.observer.step(action)
-        self.count+=1
-
+        self.count += 1
 
     def before_start(self, path):
         super().before_start(path)
-        self.count=0
+        self.count = 0
         self.observer.reset(path, 0)
 
     def __str__(self):
@@ -151,6 +159,56 @@ class SBSolver(EcoleSolver):
 
     def __repr__(self):
         return self.rep
+
+
+class MixEcoleSolver(EcoleSolver):
+    def __init__(self, solvers, scip_params):
+        self.solvers, self.conditions = list(zip(*solvers))
+        obsevers = []
+        for solver in self.solvers:
+            if isinstance(solver, EcoleSolver):
+                obsevers.append(solver.env.observation_function)
+            else:
+                obsevers.append(None)
+        observer = ConditionalObservers(obsevers, self.conditions)
+
+        env = HistoryBranchingEnvironment(
+            observation_function=(
+                observer
+            ),
+            information_function={
+                "nb_nodes": ecole.reward.NNodes(),
+                "time": ecole.reward.SolvingTime(),
+            },
+            scip_params=scip_params,
+        )
+
+        super().__init__(env)
+
+    def get_action(self, action_set, observation) -> int:
+        for solver, condition in zip(self.solvers, self.conditions):
+            if condition(self.model):
+                return solver.get_action(action_set, observation)
+
+    def after_action(self):
+        for solver, condition in zip(self.solvers, self.conditions):
+            if condition(self.model):
+                if not isinstance(solver, EcoleSolver):
+                    old_value = self.model.getParam('branching/ecole::ReverseBranchrule/priority')
+                    self.model.setParam('branching/ecole::ReverseBranchrule/priority', 0)
+                    solver.configure()
+                    self.model.optimize()
+                    self.model.setParam('branching/ecole::ReverseBranchrule/priority', old_value)
+
+                    return True
+
+                else:
+                    self.model.setParam('branching/ecole::ReverseBranchrule/priority', 536870911)
+                    return False
+
+    def __repr__(self):
+        m = ",".join([str(s) for s in self.solvers])
+        return f"Mix({m})"
 
 
 class GnnSolver(EcoleSolver):
@@ -190,9 +248,11 @@ class ClassicSolver(Solver):
         super().__init__()
         self.model = pyscipopt.Model()
         self.branching_policy = branching_policy
-        utils.configure(self.model, branching_policy=branching_policy)
-
+        self.configure()
         self.model.setParams(scip_params)
+
+    def configure(self):
+        utils.configure(self.model, branching_policy=self.branching_policy)
 
     def solve(self, path: str):
         self.model.readProblem(path)

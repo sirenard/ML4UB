@@ -40,12 +40,14 @@ class UnrealisticObserver:
 
         prob_indexes = sorted([var.getCol().getLPPos() for var in candidates])
 
+        r = self.rng.integers(0, 2**32)
         args = list(zip(
             list(range(n_actions))*self.n_repetitions,
             repeat(self.action_history),
-            [self.seed + j for _ in range(n_actions) for j in range(self.n_repetitions)],
+            [r + j for _ in range(n_actions) for j in range(self.n_repetitions)],
             repeat(self.instance_path),
-            repeat(self.scip_params)
+            repeat(self.scip_params),
+            repeat(self.n_repetitions==1),
         ))
 
         if self.pool:
@@ -73,8 +75,9 @@ class UnrealisticObserver:
         self.action_history.append(action)
 
     @staticmethod
-    def get_score(action_index, action_history, seed, instance_path, scip_params):
+    def get_score(action_index, action_history, seed, instance_path, scip_params, use_full_strong=False):
         env = HistoryBranchingEnvironment(
+            observation_function=ecole.observation.StrongBranchingScores() if use_full_strong else None,
             information_function={
                 "nb_nodes": ecole.reward.NNodes(),
                 "gap": reward.gapReward()
@@ -85,7 +88,7 @@ class UnrealisticObserver:
         rng = np.random.default_rng(seed)
 
         history_index = 0
-        env.seed(seed)
+        env.seed(0)
 
         nb_nodes, t = 0, 0
         instance = ecole.scip.Model.from_file(instance_path)
@@ -100,6 +103,8 @@ class UnrealisticObserver:
                 assert action in action_set
             elif history_index == len(action_history):
                 action = action_set[action_index]
+            elif use_full_strong:
+                action = action_set[observation[action_set].argmax()]
             else:
                 action = rng.choice(action_set)
 
@@ -145,3 +150,23 @@ class ExploreThenStrongBranch:
             return (self.strong_branching_function.extract(model, done), True)
         else:
             return (self.pseudocosts_function.extract(model, done), False)
+
+
+class ConditionalObservers:
+    def __init__(self, observers, conditions):
+        self.observers = observers
+        self.conditions = conditions
+
+    def before_reset(self, model):
+        for observer in self.observers:
+            if observer is not None:
+                observer.before_reset(model)
+
+    def extract(self, model, done):
+        m: pyscipopt.Model = model.as_pyscipopt()
+        for (observer, condition) in zip(self.observers, self.conditions):
+            if condition(m):
+                if observer is None:
+                    return
+                else:
+                    return observer.extract(model, done)
