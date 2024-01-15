@@ -11,7 +11,7 @@ import utils
 from bpp import BinpackingGenerator
 from environments import HistoryBranchingEnvironment
 from model import load_policy
-from observer import UnrealisticObserver, ExploreThenStrongBranch, ConditionalObservers, DistObserver
+from observer import UnrealisticObserver, ConditionalObservers, DistObserver
 
 
 class Solver:
@@ -140,10 +140,10 @@ class UBSolver(EcoleSolver):
 
 
 class SBSolver(EcoleSolver):
-    def __init__(self, expert_probability=1.0, scip_params={}, additional_observers=[]):
+    def __init__(self, scip_params={}, additional_observers=[]):
         env = HistoryBranchingEnvironment(
             observation_function=(
-                ExploreThenStrongBranch(expert_probability),
+                ecole.observation.StrongBranchingScores(),
                 *additional_observers
             ),
             information_function={
@@ -153,7 +153,7 @@ class SBSolver(EcoleSolver):
             scip_params=scip_params,
         )
 
-        self.rep = f"SB({expert_probability})"
+        self.rep = f"SB"
         super().__init__(env)
 
     def __repr__(self):

@@ -4,7 +4,7 @@ from pathlib import Path
 import ecole
 
 from environments import HistoryBranchingEnvironment
-from observer import UnrealisticObserver, ExploreThenStrongBranch
+from observer import UnrealisticObserver
 
 
 def data_generation(instances, data_max_samples, folder_name = "samples", scip_params_env={}, **kwargs):

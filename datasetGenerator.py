@@ -47,14 +47,15 @@ class DatasetGenerator:
         for _ in range(self.episode_counter):
             next(self.instances)
 
-    def generate(self, folder_name, max_samples):
+    def generate(self, folder_name, max_samples=-1, max_instances=-1):
         Path(folder_name).mkdir(parents=True, exist_ok=True)
+        assert max_samples > 0 or max_instances > 0, "One of these parameters must be > 0"
 
         def before_action(action, action_set, observation):
             scores, node_observation, *_ = observation
             scores_are_expert = self.observer.get_last_observer_index_used() == 0
 
-            if scores_are_expert and self.sample_counter < max_samples:
+            if scores_are_expert and (max_samples<0 or self.sample_counter < max_samples):
                 self.sample_counter += 1
                 data = [node_observation, action, action_set, scores]
                 filename = f"{folder_name}/sample_{self.sample_counter}.pkl"
@@ -66,7 +67,8 @@ class DatasetGenerator:
 
         prob_file = tempfile.NamedTemporaryFile(suffix=".lp", dir="tmp")
 
-        while self.sample_counter < max_samples:
+        count=0
+        while ( max_samples<0 or self.sample_counter < max_samples) and (max_instances<0 or count<max_instances):
             try:
                 # not very beautiful
                 if isinstance(self.expert_observer, UnrealisticObserver):
@@ -74,6 +76,7 @@ class DatasetGenerator:
 
                 instance = next(self.instances)
                 self.episode_counter += 1
+                count += 1
                 m = instance.as_pyscipopt()
                 m.setParam("display/verblevel", 0)
                 m.writeProblem(prob_file.name)
