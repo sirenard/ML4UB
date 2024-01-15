@@ -1,3 +1,5 @@
+import tempfile
+
 import numpy as np
 
 import utils
@@ -31,18 +33,28 @@ def evaluate_solvers(solvers: [Solver], instances, n_instances, metrics):
 
     data = np.zeros((n_instances, len(solvers), len(metrics)))
 
+    prob_file = tempfile.NamedTemporaryFile(suffix=".lp", dir="tmp")
+
+    crashed_instance_indexes = []
+
     for i, instance in zip(range(n_instances), instances):
         output_control.mute()
-        instance.as_pyscipopt().writeProblem("prob.lp")
+        instance.as_pyscipopt().writeProblem(prob_file.name)
         output_control.unmute()
 
         print(f"{i:<15}", end="")
-        for j, solver in enumerate(solvers):
-            solver.solve("prob.lp")
-            line = [solver[metric] for metric in metrics]
-            for k, d in enumerate(line):
-                data[i, j, k] = d
-            print("".join([f"{d:{'<15.3f' if type(d)==float else '<15'}}" for d in line]), end="", flush=True)
+        try:
+            for j, solver in enumerate(solvers):
+                solver.solve(prob_file.name)
+                line = [solver[metric] for metric in metrics]
+                for k, d in enumerate(line):
+                    data[i, j, k] = d
+                print("".join([f"{d:{'<15.3f' if type(d)==float else '<15'}}" for d in line]), end="", flush=True)
+        except:
+            crashed_instance_indexes.append(i)
+            print("CRASH", end="")
+
+        data = np.delete(data, crashed_instance_indexes, axis=0)
 
         print()
 
@@ -54,5 +66,6 @@ def evaluate_solvers(solvers: [Solver], instances, n_instances, metrics):
         sum = d.sum_over_instances()
         print(f"{'sum ' + name:<15}"+"".join([f"{sum[j,k]:<15.3f}" for j in range(len(solvers)) for k in range(len(metrics))]))
 
+    prob_file.close()
     return res
 

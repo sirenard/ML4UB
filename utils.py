@@ -55,6 +55,13 @@ def solve(model: pyscipopt.Model):
     return nnodes, obj
 
 
+def write_to_file(model_path, solution_path, model: pyscipopt.Model):
+    output_control = OutputControl()
+    output_control.mute()
+    model.writeProblem(model_path, trans=True)
+    model.writeBestTransSol(solution_path, write_zeros=True)
+    output_control.unmute()
+
 def mpi_start(f, *args, **kwargs):
     n_mpi = MPI.COMM_WORLD.Get_size()
     with MpiPool() as pool:

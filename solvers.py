@@ -1,11 +1,7 @@
-import gzip
-import pickle
-
 import ecole
 import numpy as np
 import pyscipopt
 import time
-from pathlib import Path
 
 import torch
 from mpipool import MPIPool
@@ -13,10 +9,9 @@ from mpipool import MPIPool
 import model
 import utils
 from bpp import BinpackingGenerator
-from environments import HistoryBranchingEnvironment, SimpleBranching, SimpleConfiguring
+from environments import HistoryBranchingEnvironment
 from model import load_policy
-from observer import UnrealisticObserver, ExploreThenStrongBranch, ConditionalObservers
-from utils import get_ecole_model_from_file
+from observer import UnrealisticObserver, ExploreThenStrongBranch, ConditionalObservers, DistObserver
 
 
 class Solver:
@@ -39,6 +34,8 @@ class Solver:
                 return self.model.getObjVal()
             case "gap":
                 return self.model.getGap()
+            case "sol":
+                return self.model.getBestSol()
             case _:
                 raise KeyError
 
@@ -95,8 +92,8 @@ class EcoleSolver(Solver):
         return False
 
     def get_action(self, action_set, observation) -> int:
-        ub_scores, _ = observation[0]
-        action_index = ub_scores[action_set].argmax()
+        scores = observation[0]
+        action_index = scores[action_set].argmax()
         action = action_set[action_index]
         return action
 
@@ -104,11 +101,13 @@ class EcoleSolver(Solver):
 class UBSolver(EcoleSolver):
     def __init__(self, n_repetitions=20, scip_params_env={}, scip_params={}, pool: MPIPool = None,
                  expert_probability=1.0,
+                 local=False,
                  additional_observers=[]):
         self.observer = UnrealisticObserver(
             n_repetitions,
             scip_params=scip_params,
             pool=pool,
+            local=local,
             expert_probability=expert_probability,
         )
 
@@ -161,6 +160,50 @@ class SBSolver(EcoleSolver):
         return self.rep
 
 
+class RandomSolver(EcoleSolver):
+    def __init__(self, scip_params={}, additional_observers=[], seed=None):
+        env = HistoryBranchingEnvironment(
+            observation_function=additional_observers,
+            information_function={
+                "nb_nodes": ecole.reward.NNodes(),
+                "time": ecole.reward.SolvingTime(),
+            },
+            scip_params=scip_params,
+        )
+        super().__init__(env)
+        self.rng = np.random.default_rng(seed)
+
+    def get_action(self, action_set, observation) -> int:
+        action = self.rng.choice(action_set)
+        return action
+
+    def seed(self, seed):
+        self.rng = np.random.default_rng(seed)
+
+class DistSolver(EcoleSolver):
+    def __init__(self, scip_params={}, additional_observers=[], expert_probability=1):
+        observer = DistObserver(expert_probability=expert_probability)
+        env = HistoryBranchingEnvironment(
+            observation_function=(
+                observer,
+                *additional_observers,
+            ),
+            information_function={
+                "nb_nodes": ecole.reward.NNodes(),
+                "time": ecole.reward.SolvingTime(),
+            },
+            scip_params=scip_params,
+        )
+        super().__init__(env)
+
+
+    def __repr__(self):
+        return f"dist"
+
+
+
+
+
 class MixEcoleSolver(EcoleSolver):
     def __init__(self, solvers, scip_params):
         self.solvers, self.conditions = list(zip(*solvers))
@@ -205,6 +248,13 @@ class MixEcoleSolver(EcoleSolver):
                 else:
                     self.model.setParam('branching/ecole::ReverseBranchrule/priority', 536870911)
                     return False
+
+    def before_start(self, path):
+        for solver, condition in zip(self.solvers, self.conditions):
+            if isinstance(solver, EcoleSolver):
+                solver.before_start(path)
+
+        return super().before_start(path)
 
     def __repr__(self):
         m = ",".join([str(s) for s in self.solvers])
@@ -260,46 +310,6 @@ class ClassicSolver(Solver):
 
     def __str__(self):
         return self.branching_policy
-
-
-class DatasetGenerator:
-    def __init__(self, instances, solver: EcoleSolver, sample_counter=0, episode_counter=0):
-        self.solver = solver
-        self.instances = instances
-        self.sample_counter = sample_counter
-        self.episode_counter = episode_counter
-
-        for _ in range(self.episode_counter):
-            next(self.instances)
-
-    def generate(self, folder_name, max_samples):
-        Path(folder_name).mkdir(parents=True, exist_ok=True)
-
-        def before_action(action, action_set, observation):
-            (scores, scores_are_expert), node_observation, *_ = observation
-
-            if scores_are_expert and self.sample_counter < max_samples:
-                self.sample_counter += 1
-                data = [node_observation, action, action_set, scores]
-                filename = f"{folder_name}/sample_{self.sample_counter}.pkl"
-
-                with gzip.open(filename, "wb") as f:
-                    pickle.dump(data, f)
-
-        self.solver.set_before_action_callbacks([before_action])
-
-        while self.sample_counter < max_samples:
-            try:
-                instance = next(self.instances)
-                self.episode_counter += 1
-                m = instance.as_pyscipopt()
-                m.setParam("display/verblevel", 0)
-                m.writeProblem("prob.lp")
-                self.solver.solve("prob.lp")
-
-                print(f"Episode {self.episode_counter}, {self.sample_counter} samples collected so far")
-            except:
-                print(f"Crash on episode {self.episode_counter}")
 
 
 if __name__ == "__main__":

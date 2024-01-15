@@ -67,6 +67,8 @@ class MpiPool:
                 res[i] = val
                 receive_counter += 1
 
+        assert "error" not in res
+
         return res
 
     def worker_loop(self):
@@ -83,7 +85,10 @@ class MpiPool:
 
             match tag:
                 case 1:
-                    res = f(*args)
+                    try:
+                        res = f(*args)
+                    except:
+                        res = "error"
                     mpi_comm.send(res, 0, tag=2)
                 case _:
                     done = True
