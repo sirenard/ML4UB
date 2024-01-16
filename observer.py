@@ -1,7 +1,10 @@
 import math
 import tempfile
 
+import torch
+
 import utils
+from model import load_policy, get_device
 from mpi import MpiPool
 
 import ecole
@@ -135,6 +138,27 @@ class UnrealisticObserver:
         gap = info["gap"]
         return (1+gap) * nb_nodes
         #return nb_nodes
+
+
+class GnnObserver:
+    def __init__(self, policy_path: str, feature_observer=ecole.observation.NodeBipartite()):
+        self.policy = load_policy(policy_path)
+        self.feature_observer = feature_observer
+
+    def before_reset(self, model):
+        self.feature_observer.before_reset(model)
+    def extract(self, model, done):
+        device = get_device()
+        observation = self.feature_observer.extract(model, done)
+        observation = (
+            torch.from_numpy(observation.row_features.astype(np.float32)).to(device),
+            torch.from_numpy(observation.edge_features.indices.astype(np.int64)).to(device),
+            torch.from_numpy(observation.edge_features.values.astype(np.float32)).view(-1, 1).to(device),
+            torch.from_numpy(observation.variable_features.astype(np.float32)).to(device),
+        )
+
+        logits = self.policy(*observation)
+        return logits.detach().numpy()
 
 
 class DistObserver:

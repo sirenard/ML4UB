@@ -3,15 +3,11 @@ import numpy as np
 import pyscipopt
 import time
 
-import torch
-from mpipool import MPIPool
-
-import model
 import utils
 from bpp import BinpackingGenerator
 from environments import HistoryBranchingEnvironment
-from model import load_policy
-from observer import UnrealisticObserver, ConditionalObservers, DistObserver
+from mpi import MpiPool
+from observer import UnrealisticObserver, ConditionalObservers, DistObserver, GnnObserver
 
 
 class Solver:
@@ -99,7 +95,7 @@ class EcoleSolver(Solver):
 
 
 class UBSolver(EcoleSolver):
-    def __init__(self, n_repetitions=20, scip_params_env={}, scip_params={}, pool: MPIPool = None,
+    def __init__(self, n_repetitions=20, scip_params_env={}, scip_params={}, pool: MpiPool = None,
                  expert_probability=1.0,
                  local=False,
                  additional_observers=[]):
@@ -263,31 +259,22 @@ class MixEcoleSolver(EcoleSolver):
 
 class GnnSolver(EcoleSolver):
     def __init__(self, policy_path, scip_params={}):
+        observer = GnnObserver(
+            policy_path,
+            ecole.observation.NodeBipartite()
+        )
         env = HistoryBranchingEnvironment(
-            observation_function=ecole.observation.NodeBipartite(),
+            observation_function=[observer],
             information_function={
                 "nb_nodes": ecole.reward.NNodes(),
                 "time": ecole.reward.SolvingTime(),
             },
             scip_params=scip_params,
         )
-        self.policy = load_policy(policy_path)
+
         self.policy_path = policy_path
 
         super().__init__(env)
-
-    def get_action(self, action_set, observation) -> int:
-        device = model.get_device()
-        observation = (
-            torch.from_numpy(observation.row_features.astype(np.float32)).to(device),
-            torch.from_numpy(observation.edge_features.indices.astype(np.int64)).to(device),
-            torch.from_numpy(observation.edge_features.values.astype(np.float32)).view(-1, 1).to(device),
-            torch.from_numpy(observation.variable_features.astype(np.float32)).to(device),
-        )
-
-        logits = self.policy(*observation)
-        action = action_set[logits[action_set.astype(np.int64)].argmax()]
-        return action
 
     def __str__(self):
         return "GNN({})".format(self.policy_path)

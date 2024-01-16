@@ -1,12 +1,11 @@
 import gzip
 import pickle
+from pathlib import Path
 
 import numpy as np
 import torch
 import torch_geometric
 import torch.nn.functional as F
-
-from dataset import get_sample_files
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -337,7 +336,11 @@ def train(sample_folder: str, learning_rate: float, n_epochs: int, output="agent
 
 def load_policy(filename):
     policy = GNNPolicy().to(DEVICE)
-    policy.load_state_dict(torch.load(filename))
+    if DEVICE.type == "cpu":
+        map_location = torch.device('cpu')
+    else:
+        map_location = None
+    policy.load_state_dict(torch.load(filename, map_location=map_location))
     return policy
 
 def evaluate(instances, n_instances, env, default_env, policy):
@@ -372,4 +375,5 @@ def evaluate(instances, n_instances, env, default_env, policy):
             f"             | Gain         {100 * (1 - nb_nodes / default_info['nb_nodes']): >8.2f}% | Gain      {100 * (1 - time / default_info['time']): >8.2f}%")
 
 
-
+def get_sample_files(folder: str):
+    return [str(path) for path in Path("{}/".format(folder)).glob("sample_*.pkl")]

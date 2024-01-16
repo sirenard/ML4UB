@@ -58,5 +58,3 @@ def data_generation(instances, data_max_samples, folder_name = "samples", scip_p
 
         print(f"Episode {episode_counter}, {sample_counter} samples collected so far")
 
-def get_sample_files(folder: str):
-    return [str(path) for path in Path("{}/".format(folder)).glob("sample_*.pkl")]
