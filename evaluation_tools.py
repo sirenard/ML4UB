@@ -1,3 +1,4 @@
+import sys
 import tempfile
 
 import numpy as np
@@ -26,6 +27,9 @@ class Data:
     def sum_over_instances(self):
         return self.data.sum(axis=0)
 
+    def performance_profile(self, metric: str):
+        pass
+
 def evaluate_solvers(solvers: [Solver], instances, n_instances, metrics):
     print(f"{'Instance':<15}" + "".join([f"{str(solver):<{15*len(metrics)}}" for solver in solvers]))
     print(f"{'':<15}" + len(solvers)*("".join([f"{metric:<15}" for metric in metrics])))
@@ -50,8 +54,9 @@ def evaluate_solvers(solvers: [Solver], instances, n_instances, metrics):
                 for k, d in enumerate(line):
                     data[i, j, k] = d
                 print("".join([f"{d:{'<15.3f' if type(d)==float else '<15'}}" for d in line]), end="", flush=True)
-        except:
+        except Exception as e:
             crashed_instance_indexes.append(i)
+            print(e, file=sys.stderr)
             print("CRASH", end="")
 
         data = np.delete(data, crashed_instance_indexes, axis=0)

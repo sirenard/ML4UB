@@ -67,7 +67,9 @@ class MpiPool:
                 res[i] = val
                 receive_counter += 1
 
-        assert "error" not in res
+        for el in res:
+            if isinstance(el, Exception):
+                raise el
 
         return res
 
@@ -87,8 +89,8 @@ class MpiPool:
                 case 1:
                     try:
                         res = f(*args)
-                    except:
-                        res = "error"
+                    except Exception as e:
+                        res = e
                     mpi_comm.send(res, 0, tag=2)
                 case _:
                     done = True

@@ -17,13 +17,98 @@ import reward
 from environments import HistoryBranchingEnvironment
 
 
+class LiftedObserver:
+    def __init__(self, observer=ecole.observation.StrongBranchingScores(), scip_params={}, pool: MpiPool = None):
+        self.instance_path = None
+        self.action_history = []
+        self.scip_params = scip_params
+        self.pool: MpiPool = pool
+        self.observer = observer
+
+    def before_reset(self, model):
+        return
+
+    def step(self, action):
+        self.action_history.append(action)
+
+    def reset(self, instance_path, seed=None):
+        self.action_history = []
+        self.instance_path = instance_path
+
+    def extract(self, model, done):
+        m: pyscipopt.Model = model.as_pyscipopt()
+        candidates, *_ = m.getLPBranchCands()
+        n_vars = int(m.getNVars())
+
+        prob_indexes = sorted([var.getCol().getLPPos() for var in candidates])
+
+        args = list(zip(
+            prob_indexes,
+            repeat(self.action_history),
+            repeat(self.instance_path),
+            repeat(self.scip_params),
+            repeat(self.observer)
+        ))
+
+        if self.pool:
+            res = self.pool.map(self.get_score, args)
+        else:
+            res = [self.get_score(*arg) for arg in args]
+
+
+        scores = np.array(res)
+
+
+        res = np.zeros(n_vars)
+        res[:] = np.nan
+        res[prob_indexes] = scores
+        return res
+
+    @staticmethod
+    def get_score(action_index, action_history, instance_path, scip_params, observer):
+        env = HistoryBranchingEnvironment(
+            observation_function= observer,
+            information_function={
+                "nb_nodes": ecole.reward.NNodes(),
+                "gap": reward.gapReward()
+            },
+            scip_params=scip_params
+        )
+
+        history_index = 0
+        env.seed(0)
+
+        nb_nodes, t = 0, 0
+
+        observation, action_set, _, done, info = env.reset(instance_path)
+        nb_nodes += info["nb_nodes"]
+
+        while not done:
+            if history_index < len(action_history):
+                action = action_history[history_index]
+                # assert action in action_set
+            elif history_index == len(action_history):
+                action = action_index
+                # assert action in action_set
+            else:
+                action = action_set[observation[action_set].argmax()]
+
+            history_index += 1
+
+            # print(action, action_set)
+            observation, action_set, _, done, info = env.step(action)
+            nb_nodes += info["nb_nodes"]
+
+        gap = info["gap"]
+        return (1 + gap) * nb_nodes
+
+
 class UnrealisticObserver:
-    def __init__(self, n_repetitions, expert_probability=1, seed=None, scip_params={}, local=False, pool: MpiPool = None):
+    def __init__(self, n_repetitions, seed=None, scip_params={}, local=False, pool: MpiPool = None):
         self.seed = 0
         self.instance_path = "prob.lp"
         self.action_history = []
         self.n_repetitions = n_repetitions
-        self.expert_probability = expert_probability
         self.rng = np.random.default_rng(seed)
         self.pseudocosts_function = ecole.observation.Pseudocosts()
         self.scip_params = scip_params
@@ -140,15 +225,17 @@ class UnrealisticObserver:
         #return nb_nodes
 
 
-class GnnObserver:
-    def __init__(self, policy_path: str, feature_observer=ecole.observation.NodeBipartite()):
-        self.policy = load_policy(policy_path)
+class GnnObserver(object):
+    def __init__(self, policy_path: str, feature_observer=ecole.observation.NodeBipartite(), try_use_gpu=False):
+        self.policy = load_policy(policy_path, try_use_gpu)
         self.feature_observer = feature_observer
+        self.policy_path = policy_path
+        self.try_use_gpu = try_use_gpu
 
     def before_reset(self, model):
         self.feature_observer.before_reset(model)
     def extract(self, model, done):
-        device = get_device()
+        device = get_device(self.try_use_gpu)
         observation = self.feature_observer.extract(model, done)
         observation = (
             torch.from_numpy(observation.row_features.astype(np.float32)).to(device),
@@ -158,7 +245,13 @@ class GnnObserver:
         )
 
         logits = self.policy(*observation)
-        return logits.detach().numpy()
+        return logits.cpu().detach().numpy()
+
+    def __getstate__(self):
+        return self.policy_path
+
+    def __setstate__(self, state):
+        self.__init__(state)
 
 
 class DistObserver:

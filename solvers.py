@@ -7,7 +7,7 @@ import utils
 from bpp import BinpackingGenerator
 from environments import HistoryBranchingEnvironment
 from mpi import MpiPool
-from observer import UnrealisticObserver, ConditionalObservers, DistObserver, GnnObserver
+from observer import UnrealisticObserver, ConditionalObservers, DistObserver, GnnObserver, LiftedObserver
 
 
 class Solver:
@@ -155,6 +155,30 @@ class SBSolver(EcoleSolver):
     def __repr__(self):
         return self.rep
 
+class LiftedSolver(EcoleSolver):
+    def __init__(self, scip_params={}, *args, **kargs):
+        self.observer = LiftedObserver(*args, **kargs)
+        env = HistoryBranchingEnvironment(
+            observation_function=(
+                self.observer,
+            ),
+            information_function={
+                "nb_nodes": ecole.reward.NNodes(),
+                "time": ecole.reward.SolvingTime(),
+            },
+            scip_params=scip_params,
+        )
+
+        self.rep = f"LB"
+        super().__init__(env)
+
+    def before_start(self, path):
+        self.observer.reset(path)
+
+    def __repr__(self):
+        return self.rep
+
+
 
 class RandomSolver(EcoleSolver):
     def __init__(self, scip_params={}, additional_observers=[], seed=None):
@@ -258,10 +282,11 @@ class MixEcoleSolver(EcoleSolver):
 
 
 class GnnSolver(EcoleSolver):
-    def __init__(self, policy_path, scip_params={}):
+    def __init__(self, policy_path, scip_params={}, try_use_gpu=True):
         observer = GnnObserver(
             policy_path,
-            ecole.observation.NodeBipartite()
+            ecole.observation.NodeBipartite(),
+            try_use_gpu=try_use_gpu
         )
         env = HistoryBranchingEnvironment(
             observation_function=[observer],

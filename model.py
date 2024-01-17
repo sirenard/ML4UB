@@ -9,8 +9,8 @@ import torch.nn.functional as F
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def get_device():
-    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def get_device(try_use_gpu=True):
+    return torch.device("cuda" if try_use_gpu and torch.cuda.is_available() else "cpu")
 
 class BipartiteNodeData(torch_geometric.data.Data):
     """
@@ -334,9 +334,10 @@ def train(sample_folder: str, learning_rate: float, n_epochs: int, output="agent
 
     return policy
 
-def load_policy(filename):
-    policy = GNNPolicy().to(DEVICE)
-    if DEVICE.type == "cpu":
+def load_policy(filename, try_use_gpu=False):
+    device = torch.device("cuda" if try_use_gpu and torch.cuda.is_available() else "cpu")
+    policy = GNNPolicy().to(device)
+    if device.type == "cpu":
         map_location = torch.device('cpu')
     else:
         map_location = None
