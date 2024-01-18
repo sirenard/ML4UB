@@ -1,3 +1,4 @@
+import pickle
 import sys
 import tempfile
 
@@ -5,9 +6,10 @@ import numpy as np
 
 import utils
 from solvers import Solver
+import matplotlib.pyplot as plt
 
 class Data:
-    def __init__(self, raw_data: np.array, solvers, metrics):
+    def __init__(self, raw_data: np.array, solvers: [str], metrics: [str]):
         self.data = raw_data
         self.solvers = solvers
         self.metrics = metrics
@@ -27,8 +29,31 @@ class Data:
     def sum_over_instances(self):
         return self.data.sum(axis=0)
 
-    def performance_profile(self, metric: str):
-        pass
+    def performance_profile(self, metric: str = "nnodes", ratios = np.arange(1, 10.001, .2)):
+        metric_index = self.metrics.index(metric)
+        n_instances = self.data.shape[0]
+
+        frequency = np.zeros((len(self.solvers), len(ratios)))
+
+        for i in range(n_instances):
+            data = self.data[i,:,metric_index] # values for all the solver for one instance
+            best = np.min(data)
+            for r, ratio in enumerate(ratios):
+                for s in range(len(self.solvers)):
+                    val = data[s]
+                    if val/best <= ratio:
+                        frequency[s, r] += 1
+
+        frequency /= n_instances
+
+        for s, solver in enumerate(self.solvers):
+            plt.plot(ratios, frequency[s, :], label=solver)
+
+        plt.legend()
+        plt.xlabel("factor")
+        plt.ylabel("frequency")
+        plt.title(f"Performance profile w.r.t. {metric}")
+        plt.show()
 
 def evaluate_solvers(solvers: [Solver], instances, n_instances, metrics):
     print(f"{'Instance':<15}" + "".join([f"{str(solver):<{15*len(metrics)}}" for solver in solvers]))
@@ -63,7 +88,7 @@ def evaluate_solvers(solvers: [Solver], instances, n_instances, metrics):
 
         print()
 
-    res = Data(data, solvers, metrics)
+    res = Data(data, [str(s) for s in solvers], metrics)
 
     print("="*(15*(len(solvers)*len(metrics)+1)))
 
@@ -74,3 +99,7 @@ def evaluate_solvers(solvers: [Solver], instances, n_instances, metrics):
     prob_file.close()
     return res
 
+
+if __name__ == "__main__":
+    data: Data = pickle.load(open("data", "rb"))
+    data.performance_profile(metric="time")

@@ -1,3 +1,5 @@
+import pickle
+
 import ecole.observation
 import pyscipopt
 
@@ -12,10 +14,10 @@ from uc import UcigGenerator
 def main(pool = None):
     instances = UcigGenerator("instances", start_at_instance=5000)
 
-    n_instances = 50
+    n_instances = 200
 
     scip_params = {
-        "limits/nodes":2000,
+        "limits/nodes":20000,
     }
 
     scip_params_ub = {
@@ -31,21 +33,22 @@ def main(pool = None):
 	    GnnSolver("sb_0.5.pkl", scip_params),
         #LiftedSolver(scip_params, GnnObserver("sb_0.5.pkl", try_use_gpu=False), scip_params_ub, pool),
         #LiftedSolver(scip_params, StrongBranching(), scip_params_ub, pool),
-        MixEcoleSolver(
-            [
-                (LiftedSolver(scip_params, GnnObserver("sb_0.5.pkl", try_use_gpu=False), scip_params_ub, pool),
-                 lambda m: m.getNNodes()<=1),
-                (GnnSolver("sb_0.5.pkl", scip_params),lambda m: True)
-             ],
-            scip_params
-        )
+        # MixEcoleSolver(
+        #     [
+        #         (LiftedSolver(scip_params, GnnObserver("sb_0.5.pkl", try_use_gpu=False), scip_params_ub, pool),
+        #          lambda m: m.getNNodes()<=1),
+        #         (GnnSolver("sb_0.5.pkl", scip_params),lambda m: True)
+        #      ],
+        #     scip_params
+        # )
         #GnnSolver("ub_1_0.5.pkl", scip_params),
     ]
 
 
     metrics = ["nnodes", "time", "gap"]
 
-    evaluate_solvers(solvers, instances, n_instances, metrics)
+    data = evaluate_solvers(solvers, instances, n_instances, metrics)
+    pickle.dump(data, open("data", "wb"))
 
 
 if __name__ == "__main__":
