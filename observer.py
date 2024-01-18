@@ -18,7 +18,8 @@ from environments import HistoryBranchingEnvironment
 
 
 class LiftedObserver:
-    def __init__(self, observer=ecole.observation.StrongBranchingScores(), scip_params={}, pool: MpiPool = None):
+    tmp_observer = None
+    def __init__(self, observer=ecole.observation.StrongBranchingScores(), scip_params={}, pool: MpiPool = MpiPool()):
         self.instance_path = None
         self.action_history = []
         self.scip_params = scip_params
@@ -27,6 +28,17 @@ class LiftedObserver:
 
     def before_reset(self, model):
         self.action_history = []
+        LiftedObserver.tmp_observer = self.observer
+        l = lambda: HistoryBranchingEnvironment(
+            observation_function=self.observer,
+            information_function={
+                "nb_nodes": ecole.reward.NNodes(),
+                "gap": reward.gapReward()
+            },
+            scip_params=self.scip_params
+        )
+        self.pool.set_workers_state(l, is_function=True)
+
 
     def step(self, action):
         self.action_history.append(action)
@@ -45,15 +57,10 @@ class LiftedObserver:
         args = list(zip(
             prob_indexes,
             repeat(self.action_history),
-            repeat(self.instance_path),
-            repeat(self.scip_params),
-            repeat(self.observer)
+            repeat(self.instance_path)
         ))
 
-        if self.pool:
-            res = self.pool.map(self.get_score, args)
-        else:
-            res = [self.get_score(*arg) for arg in args]
+        res = self.pool.map(self.get_score, args, on_state=True)
 
 
         scores = np.array(res)
@@ -64,16 +71,7 @@ class LiftedObserver:
         return res
 
     @staticmethod
-    def get_score(action_index, action_history, instance_path, scip_params, observer):
-        env = HistoryBranchingEnvironment(
-            observation_function= observer,
-            information_function={
-                "nb_nodes": ecole.reward.NNodes(),
-                "gap": reward.gapReward()
-            },
-            scip_params=scip_params
-        )
-
+    def get_score(env: ecole.environment.Environment, action_index, action_history, instance_path):
         history_index = 0
         env.seed(0)
 

@@ -29,16 +29,16 @@ def main(pool = None):
         ClassicSolver("vanillafullstrong", scip_params),
         ClassicSolver("relpscost", scip_params),
 	    GnnSolver("sb_0.5.pkl", scip_params),
-        LiftedSolver(scip_params, GnnObserver("sb_0.5.pkl", try_use_gpu=False), scip_params_ub, pool),
-        LiftedSolver(scip_params, StrongBranching(), scip_params_ub, pool),
-        # MixEcoleSolver(
-        #     [
-        #         (LiftedSolver(scip_params, GnnObserver("sb_0.5.pkl", try_use_gpu=False), scip_params_ub, pool),
-        #          lambda m: m.getNNodes()<=1),
-        #         (GnnSolver("sb_0.5.pkl", scip_params),lambda m: True)
-        #      ],
-        #     scip_params
-        # )
+        #LiftedSolver(scip_params, GnnObserver("sb_0.5.pkl", try_use_gpu=False), scip_params_ub, pool),
+        #LiftedSolver(scip_params, StrongBranching(), scip_params_ub, pool),
+        MixEcoleSolver(
+            [
+                (LiftedSolver(scip_params, GnnObserver("sb_0.5.pkl", try_use_gpu=False), scip_params_ub, pool),
+                 lambda m: m.getNNodes()<=1),
+                (GnnSolver("sb_0.5.pkl", scip_params),lambda m: True)
+             ],
+            scip_params
+        )
         #GnnSolver("ub_1_0.5.pkl", scip_params),
     ]
 

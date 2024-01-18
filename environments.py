@@ -3,7 +3,6 @@ import pyscipopt
 from pyscipopt.scip import PY_SCIP_PARAMSETTING
 
 import utils
-from Handler import CountingHandler
 
 
 class SimpleBranchingDynamics(ecole.dynamics.BranchingDynamics):
