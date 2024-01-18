@@ -26,7 +26,7 @@ class LiftedObserver:
         self.observer = observer
 
     def before_reset(self, model):
-        return
+        self.action_history = []
 
     def step(self, action):
         self.action_history.append(action)
@@ -57,7 +57,6 @@ class LiftedObserver:
 
 
         scores = np.array(res)
-
 
         res = np.zeros(n_vars)
         res[:] = np.nan
@@ -100,7 +99,23 @@ class LiftedObserver:
             nb_nodes += info["nb_nodes"]
 
         gap = info["gap"]
-        return (1 + gap) * nb_nodes
+        return -(1 + gap) * nb_nodes
+
+class StrongBranching:
+    def __init__(self):
+        self.observer = ecole.observation.StrongBranchingScores()
+
+    def before_reset(self, model):
+        self.observer.before_reset(model)
+
+    def extract(self, model, done):
+        return self.observer.extract(model, done)
+
+    def __getstate__(self):
+        return []
+
+    def __setstate__(self, _):
+        self.__init__()
 
 
 class UnrealisticObserver:
