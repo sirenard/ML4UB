@@ -103,3 +103,4 @@ def evaluate_solvers(solvers: [Solver], instances, n_instances, metrics):
 if __name__ == "__main__":
     data: Data = pickle.load(open("data", "rb"))
     data.performance_profile(metric="time")
+    data.performance_profile(metric="nnodes")

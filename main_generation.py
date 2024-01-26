@@ -1,7 +1,7 @@
 import ecole.instance
 
 from datasetGenerator import DatasetGenerator
-from observer import LiftedObserver
+from observer import LiftedObserver, StrongBranching
 from solvers import *
 
 from uc import UcigGenerator
@@ -13,22 +13,22 @@ def main(pool: MpiPool = None):
     expert_probability = 0.5
 
     scip_params = {
-        "limits/nodes": 1000,
+        "limits/nodes": 200,
     }
 
     scip_params_ub = {
-        "limits/nodes": 2000
+        "limits/nodes": 500
     }
 
 
     generator = DatasetGenerator(
         instances,
-        expert_observer=LiftedObserver(observer=GnnObserver("sb_0.5.pkl"), scip_params=scip_params_ub, pool=pool),
-        exploration_observer=ecole.observation.StrongBranchingScores(),
+        expert_observer=LiftedObserver(observer=StrongBranching(), scip_params=scip_params_ub, pool=pool),
+        exploration_observer=ecole.observation.Pseudocosts(),
         expert_probability=expert_probability,
         scip_params=scip_params,
         )
-    generator.generate(f"ub_1_{expert_probability}", max_instances=1000)
+    generator.generate(f"ub_0_{expert_probability}", max_instances=1000)
 
 
 

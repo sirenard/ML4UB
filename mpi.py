@@ -38,7 +38,10 @@ class MpiPool:
 
     def map(self, f, args, on_state=False):
         if self.world_size == 1:
-            return [f(*arg) for arg in args]
+            if not on_state:
+                return [f(*arg) for arg in args]
+            else:
+                return [f(self.state, *arg) for arg in args]
 
         res = [None for _ in args]
         indexes = [0 for _ in self.workers]
