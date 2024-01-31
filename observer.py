@@ -16,6 +16,28 @@ import pyscipopt
 import reward
 from environments import HistoryBranchingEnvironment
 
+class RandomObserver:
+    def __init__(self, seed=None):
+        self.rng = np.random.default_rng(seed)
+
+    def before_reset(self, model):
+        return
+    def extract(self, model, done):
+        m: pyscipopt.Model = model.as_pyscipopt()
+        candidates, *_ = m.getLPBranchCands()
+        n_vars = int(m.getNVars())
+
+        prob_indexes = sorted([var.getCol().getLPPos() for var in candidates])
+
+        scores = self.rng.random(len(prob_indexes))
+        res = np.zeros(n_vars)
+        res[:] = np.nan
+        res[prob_indexes] = scores
+        return res
+
+    def seed(self, seed):
+        self.rng = np.random.default_rng(seed)
+
 
 class LiftedObserver:
     tmp_observer = None
@@ -64,6 +86,7 @@ class LiftedObserver:
 
 
         scores = np.array(res)
+        scores = scores / np.linalg.norm(scores)
 
         res = np.zeros(n_vars)
         res[:] = np.nan
