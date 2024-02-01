@@ -1,11 +1,8 @@
 import pickle
 
-import ecole.observation
-import pyscipopt
-
 from evaluation_tools import evaluate_solvers
 from model import train
-from observer import LiftedObserver, StrongBranching
+from observer import LiftedObserver, StrongBranching, GnnObserver
 from solvers import *
 
 from uc import UcigGenerator
@@ -24,14 +21,14 @@ def main(pool = None):
         "limits/nodes": 5000,
     }
 
-    policy = train("ub_0_0.5", 0.001, 50, "ub_0_0.5.pkl")
+    #policy = train("ub_0_0.5", 0.001, 50, "ub_0_0.5.pkl")
 
 
     solvers = [
         ClassicSolver("vanillafullstrong", scip_params),
         ClassicSolver("relpscost", scip_params),
-	    GnnSolver("sb_0.5.pkl", scip_params),
-	    GnnSolver("ub_0_0.5.pkl", scip_params),
+	    EcoleSolver(GnnObserver("sb_0.5.pkl"), scip_params=scip_params),
+	    #GnnSolver("ub_0_0.5.pkl", scip_params),
         #LiftedSolver(scip_params, GnnObserver("sb_0.5.pkl", try_use_gpu=False), scip_params_ub, pool),
         #LiftedSolver(scip_params, StrongBranching(), scip_params_ub, pool),
         # MixEcoleSolver(
