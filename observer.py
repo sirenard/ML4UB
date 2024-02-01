@@ -1,27 +1,45 @@
 import math
 import tempfile
-
-import torch
-
-import utils
-from model import load_policy, get_device
-from mpi import MpiPool
+from itertools import repeat
 
 import ecole
 import numpy as np
-from itertools import repeat
-
 import pyscipopt
+import torch
 
 import reward
+import utils
 from environments import HistoryBranchingEnvironment
+from model import load_policy, get_device
+from mpi import MpiPool
 
-class RandomObserver:
+
+class Observer:
     def __init__(self, seed=None):
-        self.rng = np.random.default_rng(seed)
+        self.seed = seed
+        self.action_history = []
+        self.instance_path = None
+
+    def step(self, action):
+        self.action_history.append(action)
+
+    def reset(self, instance_path, seed=None):
+        self.action_history = []
+        self.instance_path = instance_path
+        self.seed = seed
+
+    def __str__(self):
+        return "default"
+
+
+class RandomObserver(Observer):
+    def __init__(self, seed=None):
+        super().__init__(seed)
+        self.rng = np.random.default_rng()
 
     def before_reset(self, model):
         return
+
     def extract(self, model, done):
         m: pyscipopt.Model = model.as_pyscipopt()
         candidates, *_ = m.getLPBranchCands()
@@ -38,24 +56,17 @@ class RandomObserver:
     def seed(self, seed):
         self.rng = np.random.default_rng(seed)
 
-class HistoricalObserver:
-    def __init__(self, seed=None):
-        self.instance_path = None
-        self.history = []
-        self.seed = seed
+    def __str__(self):
+        return "random"
 
-    def step(self, action):
-        self.action_history.append(action)
 
-    def reset(self, instance_path, seed=None):
-        self.action_history = []
-        self.instance_path = instance_path
-        self.seed = seed
-
-class LiftedObserver(HistoricalObserver):
+class LiftedObserver(Observer):
     tmp_observer = None
+
     def __init__(self, observer=ecole.observation.StrongBranchingScores(), scip_params={}, pool: MpiPool = MpiPool()):
         super().__init__()
+        self.instance_path = None
+        self.action_history = []
         self.scip_params = scip_params
         self.pool: MpiPool = pool
         self.observer = observer
@@ -87,7 +98,6 @@ class LiftedObserver(HistoricalObserver):
         ))
 
         res = self.pool.map(self.get_score, args, on_state=True)
-
 
         scores = np.array(res)
         scores = scores / np.linalg.norm(scores)
@@ -126,8 +136,13 @@ class LiftedObserver(HistoricalObserver):
         gap = info["gap"]
         return -(1 + gap) * nb_nodes
 
-class StrongBranching:
+    def __str__(self):
+        return f"lifted({str(self.observer)})"
+
+
+class StrongBranching(Observer):
     def __init__(self):
+        super().__init__()
         self.observer = ecole.observation.StrongBranchingScores()
 
     def before_reset(self, model):
@@ -142,11 +157,13 @@ class StrongBranching:
     def __setstate__(self, _):
         self.__init__()
 
+    def __str__(self):
+        return "SB"
 
-class UnrealisticObserver(HistoricalObserver):
-    def __init__(self, n_repetitions, seed=None, scip_params={}, local=False, pool: MpiPool = None):
+
+class UnrealisticObserver(Observer):
+    def __init__(self, n_repetitions, seed=0, scip_params={}, local=False, pool: MpiPool = None):
         super().__init__(seed)
-        self.action_history = []
         self.n_repetitions = n_repetitions
         self.rng = np.random.default_rng(seed)
         self.pseudocosts_function = ecole.observation.Pseudocosts()
@@ -158,7 +175,7 @@ class UnrealisticObserver(HistoricalObserver):
         self.extract_expert(model)
 
     def extract_expert(self, model):
-        m:pyscipopt.Model = model.as_pyscipopt()
+        m: pyscipopt.Model = model.as_pyscipopt()
         candidates, *_ = m.getLPBranchCands()
         n_actions = len(candidates)
         n_vars = int(m.getNVars())
@@ -179,9 +196,9 @@ class UnrealisticObserver(HistoricalObserver):
             utils.write_to_file(instance_path, solution_path, m)
             action_history = []
 
-        r = self.rng.integers(0, 2**32)
+        r = self.rng.integers(0, 2 ** 32)
         args = list(zip(
-            prob_indexes*self.n_repetitions,
+            prob_indexes * self.n_repetitions,
             repeat(action_history),
             [r + j for _ in range(n_actions) for j in range(self.n_repetitions)],
             repeat(instance_path),
@@ -221,7 +238,6 @@ class UnrealisticObserver(HistoricalObserver):
             scip_params=scip_params
         )
 
-
         rng = np.random.default_rng(seed)
 
         history_index = 0
@@ -235,10 +251,10 @@ class UnrealisticObserver(HistoricalObserver):
         while not done:
             if history_index < len(action_history):
                 action = action_history[history_index]
-                #assert action in action_set
+                # assert action in action_set
             elif history_index == len(action_history):
                 action = action_index
-                #assert action in action_set
+                # assert action in action_set
             elif use_full_strong:
                 action = action_set[observation[action_set].argmax()]
             else:
@@ -246,18 +262,22 @@ class UnrealisticObserver(HistoricalObserver):
 
             history_index += 1
 
-
-            #print(action, action_set)
+            # print(action, action_set)
             observation, action_set, _, done, info = env.step(action)
             nb_nodes += info["nb_nodes"]
 
         gap = info["gap"]
-        return (1+gap) * nb_nodes
-        #return nb_nodes
+        return (1 + gap) * nb_nodes
+        # return nb_nodes
+
+    def __str__(self):
+        return f"UB({self.n_repetitions}"
 
 
-class GnnObserver(object):
+class GnnObserver(Observer):
     def __init__(self, policy_path: str, feature_observer=ecole.observation.NodeBipartite(), try_use_gpu=False):
+        super().__init__()
+        self.policy_path = policy_path
         self.policy = load_policy(policy_path, try_use_gpu)
         self.feature_observer = feature_observer
         self.policy_path = policy_path
@@ -265,6 +285,7 @@ class GnnObserver(object):
 
     def before_reset(self, model):
         self.feature_observer.before_reset(model)
+
     def extract(self, model, done):
         device = get_device(self.try_use_gpu)
         observation = self.feature_observer.extract(model, done)
@@ -284,13 +305,16 @@ class GnnObserver(object):
     def __setstate__(self, state):
         self.__init__(state)
 
+    def __str__(self):
+        return f"GNN({self.policy_path}"
 
-class DistObserver:
+
+class DistObserver(Observer):
     def __init__(self, expert_probability=1, seed=0):
-        self.instance_path = None
+        super().__init__(seed)
         self.expert_probability = expert_probability
         self.pseudocosts_function = ecole.observation.Pseudocosts()
-        self.sol=None
+        self.sol = None
         self.rng = np.random.default_rng(seed)
 
     def extract(self, model, done):
@@ -304,7 +328,7 @@ class DistObserver:
         return scores, is_expert
 
     def extract_expert(self, model):
-        pyscipopt_model:pyscipopt.Model = model.as_pyscipopt()
+        pyscipopt_model: pyscipopt.Model = model.as_pyscipopt()
         candidates, *_ = pyscipopt_model.getLPBranchCands()
         n_actions = len(candidates)
         n_vars = int(pyscipopt_model.getNVars())
@@ -317,7 +341,6 @@ class DistObserver:
         output.mute()
         pyscipopt_model.writeProblem(prob_file.name, trans=True)
         output.unmute()
-
 
         for index, var in zip(prob_indexes, candidates):
             var: pyscipopt.scip.Variable
@@ -336,21 +359,19 @@ class DistObserver:
                         else:
                             m.tightenVarLbGlobal(v, math.ceil(lp_val))
 
-
                 m.optimize()
                 distances.append(self.get_dist(m))
                 models.append(m)
 
-            #dist=abs(distances[0]-distances[1])
-            #dist = self.get_models_dist(*models) - min(distances)
-            #dist = self.get_models_dist(*models)
+            # dist=abs(distances[0]-distances[1])
+            # dist = self.get_models_dist(*models) - min(distances)
+            # dist = self.get_models_dist(*models)
             if np.inf in distances:
                 distances.remove(np.inf)
                 dist = distances[0]
             else:
-                dist = abs(distances[0]-distances[1])
+                dist = abs(distances[0] - distances[1])
             scores.append(dist)
-
 
         prob_file.close()
 
@@ -377,15 +398,6 @@ class DistObserver:
 
             self.sol[t_var.name] = val
 
-
-    def reset(self, instance_path, seed):
-        self.action_history = []
-        self.instance_path = instance_path
-        self.seed = seed
-
-    def step(self, action):
-        self.action_history.append(action)
-
     def get_dist(self, model: pyscipopt.Model):
         if model.getStatus() != "optimal":
             return np.inf
@@ -395,9 +407,9 @@ class DistObserver:
         for var in model.getVars():
             t_var = model.getTransformedVar(var)
             if var.name in self.sol:
-                dist += (sol[t_var] - self.sol[var.name])**2
+                dist += (sol[t_var] - self.sol[var.name]) ** 2
 
-        return dist**0.5
+        return dist ** 0.5
 
     def get_models_dist(self, m1: pyscipopt.Model, m2: pyscipopt.Model):
         if m1.getStatus() != "optimal" or m2.getStatus() != "optimal":
@@ -416,13 +428,17 @@ class DistObserver:
 
         dist = 0
         for var in vars:
-            dist += (vars[var][0] - vars[var][1])**2
+            dist += (vars[var][0] - vars[var][1]) ** 2
 
-        return dist**2
+        return dist ** 2
+
+    def __str__(self):
+        return "dist"
 
 
-class ConditionalObservers:
+class ConditionalObservers(Observer):
     def __init__(self, observers, conditions):
+        super().__init__()
         self.observers = observers
         self.conditions = conditions
         self.last_observer_index_used = -1
@@ -442,5 +458,19 @@ class ConditionalObservers:
                 else:
                     return observer.extract(model, done)
 
+    def step(self, action):
+        super().step(action)
+        for observer in self.observers:
+            observer.step(action)
+
+    def reset(self, instance_path, seed=None):
+        super().reset(instance_path, seed)
+        for observer in self.observers:
+            observer.step(instance_path, seed)
+
     def get_last_observer_index_used(self):
         return self.last_observer_index_used
+
+    def __str__(self):
+        s = ", ".join([str(observer) for observer in self.observers])
+        return f"Cond({s})"

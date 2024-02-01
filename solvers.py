@@ -1,13 +1,11 @@
-import ecole
-import numpy as np
-import pyscipopt
 import time
 
+import ecole
+import pyscipopt
+
 import utils
-from bpp import BinpackingGenerator
 from environments import HistoryBranchingEnvironment
-from mpi import MpiPool
-from observer import UnrealisticObserver, ConditionalObservers, DistObserver, GnnObserver, LiftedObserver
+from observer import Observer
 
 
 class Solver:
@@ -38,9 +36,22 @@ class Solver:
 
 class EcoleSolver(Solver):
 
-    def __init__(self, env: ecole.environment, before_start_callbacks=[], before_action_callbacks=[]):
+    def __init__(self, score_observer: Observer, additional_observers=[], scip_params={}, before_start_callbacks=[],
+                 before_action_callbacks=[]):
         super().__init__()
-        self.env: ecole.environment = env
+        self.observer = score_observer
+        self.env: ecole.environment = HistoryBranchingEnvironment(
+            observation_function=(
+                score_observer,
+                *additional_observers
+            ),
+            information_function={
+                "nb_nodes": ecole.reward.NNodes(),
+                "time": ecole.reward.SolvingTime(),
+            },
+            scip_params=scip_params,
+        )
+
         self.before_start_callbacks = before_start_callbacks
         self.before_action_callbacks = before_action_callbacks
 
@@ -93,236 +104,8 @@ class EcoleSolver(Solver):
         action = action_set[action_index]
         return action
 
-class BasicSolver(EcoleSolver):
-    def __init__(self, observer, scip_params):
-        self.observer = observer
-        env = HistoryBranchingEnvironment(
-            observation_function=(
-                observer
-            ),
-            information_function={
-                "nb_nodes": ecole.reward.NNodes(),
-                "time": ecole.reward.SolvingTime(),
-            },
-            scip_params=scip_params,
-        )
-        
-        super().__init__(env)
-
-    def before_start(self, path):
-        self.observer.reset(path)
-
     def __str__(self):
-        return "BasicSolver"
-class UBSolver(EcoleSolver):
-    def __init__(self, n_repetitions=20, scip_params_env={}, scip_params={}, pool: MpiPool = None,
-                 expert_probability=1.0,
-                 local=False,
-                 additional_observers=[]):
-        self.observer = UnrealisticObserver(
-            n_repetitions,
-            scip_params=scip_params,
-            pool=pool,
-            local=local,
-            expert_probability=expert_probability,
-        )
-
-        env = HistoryBranchingEnvironment(
-            observation_function=(
-                self.observer,
-                *additional_observers
-            ),
-            information_function={
-                "nb_nodes": ecole.reward.NNodes(),
-                "time": ecole.reward.SolvingTime(),
-            },
-            scip_params=scip_params_env,
-        )
-        self.count = 0
-        super().__init__(env)
-
-    def before_action(self, action, action_set, observation):
-        super().before_action(action, action_set, observation)
-        self.observer.step(action)
-        self.count += 1
-
-    def before_start(self, path):
-        super().before_start(path)
-        self.count = 0
-        self.observer.reset(path, 0)
-
-    def __str__(self):
-        return "UB"
-
-
-class SBSolver(EcoleSolver):
-    def __init__(self, scip_params={}, additional_observers=[]):
-        env = HistoryBranchingEnvironment(
-            observation_function=(
-                ecole.observation.StrongBranchingScores(),
-                *additional_observers
-            ),
-            information_function={
-                "nb_nodes": ecole.reward.NNodes(),
-                "time": ecole.reward.SolvingTime(),
-            },
-            scip_params=scip_params,
-        )
-
-        self.rep = f"SB"
-        super().__init__(env)
-
-    def __repr__(self):
-        return self.rep
-
-class LiftedSolver(EcoleSolver):
-    def __init__(self, scip_params={}, *args, **kargs):
-        self.observer = LiftedObserver(*args, **kargs)
-        env = HistoryBranchingEnvironment(
-            observation_function=(
-                self.observer,
-            ),
-            information_function={
-                "nb_nodes": ecole.reward.NNodes(),
-                "time": ecole.reward.SolvingTime(),
-            },
-            scip_params=scip_params,
-        )
-
-        self.rep = f"LB"
-        super().__init__(env)
-
-    def before_start(self, path):
-        self.observer.reset(path)
-
-    def __repr__(self):
-        return self.rep
-
-
-
-class RandomSolver(EcoleSolver):
-    def __init__(self, scip_params={}, additional_observers=[], seed=None):
-        env = HistoryBranchingEnvironment(
-            observation_function=additional_observers,
-            information_function={
-                "nb_nodes": ecole.reward.NNodes(),
-                "time": ecole.reward.SolvingTime(),
-            },
-            scip_params=scip_params,
-        )
-        super().__init__(env)
-        self.rng = np.random.default_rng(seed)
-
-    def get_action(self, action_set, observation) -> int:
-        action = self.rng.choice(action_set)
-        return action
-
-    def seed(self, seed):
-        self.rng = np.random.default_rng(seed)
-
-class DistSolver(EcoleSolver):
-    def __init__(self, scip_params={}, additional_observers=[], expert_probability=1):
-        observer = DistObserver(expert_probability=expert_probability)
-        env = HistoryBranchingEnvironment(
-            observation_function=(
-                observer,
-                *additional_observers,
-            ),
-            information_function={
-                "nb_nodes": ecole.reward.NNodes(),
-                "time": ecole.reward.SolvingTime(),
-            },
-            scip_params=scip_params,
-        )
-        super().__init__(env)
-
-
-    def __repr__(self):
-        return f"dist"
-
-
-
-
-
-class MixEcoleSolver(EcoleSolver):
-    def __init__(self, solvers, scip_params):
-        self.solvers, self.conditions = list(zip(*solvers))
-        obsevers = []
-        for solver in self.solvers:
-            if isinstance(solver, EcoleSolver):
-                obsevers.append(solver.env.observation_function)
-            else:
-                obsevers.append(None)
-        observer = ConditionalObservers(obsevers, self.conditions)
-
-        env = HistoryBranchingEnvironment(
-            observation_function=(
-                observer
-            ),
-            information_function={
-                "nb_nodes": ecole.reward.NNodes(),
-                "time": ecole.reward.SolvingTime(),
-            },
-            scip_params=scip_params,
-        )
-
-        super().__init__(env)
-
-    def get_action(self, action_set, observation) -> int:
-        for solver, condition in zip(self.solvers, self.conditions):
-            if condition(self.model):
-                return solver.get_action(action_set, observation)
-
-    def after_action(self):
-        for solver, condition in zip(self.solvers, self.conditions):
-            if condition(self.model):
-                if not isinstance(solver, EcoleSolver):
-                    old_value = self.model.getParam('branching/ecole::ReverseBranchrule/priority')
-                    self.model.setParam('branching/ecole::ReverseBranchrule/priority', 0)
-                    solver.configure()
-                    self.model.optimize()
-                    self.model.setParam('branching/ecole::ReverseBranchrule/priority', old_value)
-
-                    return True
-
-                else:
-                    self.model.setParam('branching/ecole::ReverseBranchrule/priority', 536870911)
-                    return False
-
-    def before_start(self, path):
-        for solver, condition in zip(self.solvers, self.conditions):
-            if isinstance(solver, EcoleSolver):
-                solver.before_start(path)
-
-        return super().before_start(path)
-
-    def __repr__(self):
-        m = ",".join([str(s) for s in self.solvers])
-        return f"Mix({m})"
-
-
-class GnnSolver(EcoleSolver):
-    def __init__(self, policy_path, scip_params={}, try_use_gpu=True):
-        observer = GnnObserver(
-            policy_path,
-            ecole.observation.NodeBipartite(),
-            try_use_gpu=try_use_gpu
-        )
-        env = HistoryBranchingEnvironment(
-            observation_function=[observer],
-            information_function={
-                "nb_nodes": ecole.reward.NNodes(),
-                "time": ecole.reward.SolvingTime(),
-            },
-            scip_params=scip_params,
-        )
-
-        self.policy_path = policy_path
-
-        super().__init__(env)
-
-    def __str__(self):
-        return "GNN({})".format(self.policy_path)
+        return str(self.observer)
 
 
 class ClassicSolver(Solver):
@@ -342,26 +125,3 @@ class ClassicSolver(Solver):
 
     def __str__(self):
         return self.branching_policy
-
-
-if __name__ == "__main__":
-    n_objects = 20
-    bin_capacity = 100
-    weight_bounds = (20, 22)
-    instances = BinpackingGenerator(n_objects, bin_capacity, weight_bounds)
-    instances.seed(0)
-
-    solver = UBSolver(n_repetitions=20, scip_params={"limits/nodes": 2000}, expert_probability=0.1,
-                      additional_observers=[ecole.observation.NodeBipartite()])
-
-    # generator = DatasetGenerator(instances, solver)
-    # generator.generate("test", 100)
-
-    # solver = UBSolver(20, {}, None)
-    solver = ClassicSolver("vanillafullstrong")
-    instance = next(instances)
-    m = instance.as_pyscipopt()
-    m.writeProblem("prob.lp")
-    solver.solve("prob.lp")
-
-    print(solver["time"], solver["gap"], solver["obj"], solver["nnodes"])
