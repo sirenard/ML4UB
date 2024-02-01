@@ -27,18 +27,18 @@ def main(pool = None):
     solvers = [
         ClassicSolver("vanillafullstrong", scip_params),
         ClassicSolver("relpscost", scip_params),
-	    EcoleSolver(GnnObserver("sb_0.5.pkl"), scip_params=scip_params),
+        EcoleSolver(StrongBranching(), scip_params),
+	    #EcoleSolver(GnnObserver("sb_0.5.pkl"), scip_params=scip_params),
 	    #GnnSolver("ub_0_0.5.pkl", scip_params),
         #LiftedSolver(scip_params, GnnObserver("sb_0.5.pkl", try_use_gpu=False), scip_params_ub, pool),
         #LiftedSolver(scip_params, StrongBranching(), scip_params_ub, pool),
-        # MixEcoleSolver(
-        #     [
-        #         (LiftedSolver(scip_params, GnnObserver("sb_0.5.pkl", try_use_gpu=False), scip_params_ub, pool),
-        #          lambda m: m.getNNodes()<=1),
-        #         (GnnSolver("sb_0.5.pkl", scip_params),lambda m: True)
-        #      ],
-        #     scip_params
-        # )
+        EcoleSolver(GnnObserver("sb_0.5.pkl", try_use_gpu=False), scip_params),
+        EcoleSolver(
+                LiftedObserver(GnnObserver("sb_0.5.pkl"), scip_params_ub, pool),
+        ),
+        EcoleSolver(
+            LiftedObserver(StrongBranching(), scip_params_ub, pool),
+        )
         #GnnSolver("ub_1_0.5.pkl", scip_params),
     ]
 
