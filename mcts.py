@@ -50,7 +50,7 @@ class MctsObserver(Observer):
             node = root.select(math.sqrt(2))
             action_history.clear()
             node.get_action_sequence(action_history)
-            env.reset(0)
+            env.seed(0)
 
             observation, action_set, _, done, info = env.reset(self.instance_path)
             nb_nodes = info["nb_nodes"]
