@@ -38,12 +38,24 @@ class RandomObserver:
     def seed(self, seed):
         self.rng = np.random.default_rng(seed)
 
+class HistoricalObserver:
+    def __init__(self, seed=None):
+        self.instance_path = None
+        self.history = []
+        self.seed = seed
 
-class LiftedObserver:
+    def step(self, action):
+        self.action_history.append(action)
+
+    def reset(self, instance_path, seed=None):
+        self.action_history = []
+        self.instance_path = instance_path
+        self.seed = seed
+
+class LiftedObserver(HistoricalObserver):
     tmp_observer = None
     def __init__(self, observer=ecole.observation.StrongBranchingScores(), scip_params={}, pool: MpiPool = MpiPool()):
-        self.instance_path = None
-        self.action_history = []
+        super().__init__()
         self.scip_params = scip_params
         self.pool: MpiPool = pool
         self.observer = observer
@@ -60,14 +72,6 @@ class LiftedObserver:
             scip_params=self.scip_params
         )
         self.pool.set_workers_state(l, is_function=True)
-
-
-    def step(self, action):
-        self.action_history.append(action)
-
-    def reset(self, instance_path, seed=None):
-        self.action_history = []
-        self.instance_path = instance_path
 
     def extract(self, model, done):
         m: pyscipopt.Model = model.as_pyscipopt()
@@ -139,10 +143,9 @@ class StrongBranching:
         self.__init__()
 
 
-class UnrealisticObserver:
+class UnrealisticObserver(HistoricalObserver):
     def __init__(self, n_repetitions, seed=None, scip_params={}, local=False, pool: MpiPool = None):
-        self.seed = 0
-        self.instance_path = "prob.lp"
+        super().__init__(seed)
         self.action_history = []
         self.n_repetitions = n_repetitions
         self.rng = np.random.default_rng(seed)
@@ -206,14 +209,6 @@ class UnrealisticObserver:
 
     def before_reset(self, model):
         self.pseudocosts_function.before_reset(model)
-
-    def reset(self, instance_path, seed):
-        self.action_history = []
-        self.instance_path = instance_path
-        self.seed = seed
-
-    def step(self, action):
-        self.action_history.append(action)
 
     @staticmethod
     def get_score(action_index, action_history, seed, instance_path, scip_params, solution_path, use_full_strong=False):

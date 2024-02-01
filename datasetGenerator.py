@@ -6,7 +6,7 @@ import numpy as np
 import ecole.observation
 
 from environments import HistoryBranchingEnvironment
-from observer import ConditionalObservers, UnrealisticObserver, LiftedObserver
+from observer import ConditionalObservers, UnrealisticObserver, LiftedObserver, HistoricalObserver
 from solvers import EcoleSolver
 
 
@@ -71,7 +71,7 @@ class DatasetGenerator:
         while ( max_samples<0 or self.sample_counter < max_samples) and (max_instances<0 or count<max_instances):
             try:
                 # not very beautiful
-                if isinstance(self.expert_observer, UnrealisticObserver) or isinstance(self.expert_observer, LiftedObserver):
+                if isinstance(self.expert_observer, HistoricalObserver):
                     self.expert_observer.reset(prob_file.name, 0)
 
                 instance = next(self.instances)

@@ -93,7 +93,27 @@ class EcoleSolver(Solver):
         action = action_set[action_index]
         return action
 
+class BasicSolver(EcoleSolver):
+    def __init__(self, observer, scip_params):
+        self.observer = observer
+        env = HistoryBranchingEnvironment(
+            observation_function=(
+                observer
+            ),
+            information_function={
+                "nb_nodes": ecole.reward.NNodes(),
+                "time": ecole.reward.SolvingTime(),
+            },
+            scip_params=scip_params,
+        )
+        
+        super().__init__(env)
 
+    def before_start(self, path):
+        self.observer.reset(path)
+
+    def __str__(self):
+        return "BasicSolver"
 class UBSolver(EcoleSolver):
     def __init__(self, n_repetitions=20, scip_params_env={}, scip_params={}, pool: MpiPool = None,
                  expert_probability=1.0,

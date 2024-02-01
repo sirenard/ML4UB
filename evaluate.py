@@ -4,6 +4,7 @@ import ecole.observation
 import pyscipopt
 
 from evaluation_tools import evaluate_solvers
+from mcts import MctsObserver
 from model import train
 from observer import LiftedObserver, StrongBranching
 from solvers import *
@@ -24,14 +25,14 @@ def main(pool = None):
         "limits/nodes": 5000,
     }
 
-    policy = train("ub_0_0.5", 0.001, 50, "ub_0_0.5.pkl")
+    #policy = train("ub_0_0.5", 0.001, 50, "ub_0_0.5.pkl")
 
 
     solvers = [
         ClassicSolver("vanillafullstrong", scip_params),
-        ClassicSolver("relpscost", scip_params),
-	    GnnSolver("sb_0.5.pkl", scip_params),
-	    GnnSolver("ub_0_0.5.pkl", scip_params),
+        #ClassicSolver("relpscost", scip_params),
+	    #GnnSolver("sb_0.5.pkl", scip_params),
+	    #GnnSolver("ub_0_0.5.pkl", scip_params),
         #LiftedSolver(scip_params, GnnObserver("sb_0.5.pkl", try_use_gpu=False), scip_params_ub, pool),
         #LiftedSolver(scip_params, StrongBranching(), scip_params_ub, pool),
         # MixEcoleSolver(
@@ -43,12 +44,13 @@ def main(pool = None):
         #     scip_params
         # )
         #GnnSolver("ub_1_0.5.pkl", scip_params),
+        BasicSolver(MctsObserver(play_out_observer=StrongBranching()), scip_params),
     ]
 
 
     metrics = ["nnodes", "time", "gap"]
 
-    data = evaluate_solvers(solvers, instances, n_instances, metrics)
+    data = evaluate_solvers(solvers, instances, n_instances, metrics, catch_errors=False)
     pickle.dump(data, open("data", "wb"))
 
     data.performance_profile(metric="time")
