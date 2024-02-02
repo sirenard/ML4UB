@@ -13,7 +13,7 @@ from observer import ConditionalObservers, RandomObserver, Observer
 
 
 class MctsObserver(Observer):
-    def __init__(self, play_out_observer=ecole.observation.StrongBranchingScores(), simulation_time_budget=600, pool: MpiPool=MpiPool()):
+    def __init__(self, play_out_observer=ecole.observation.StrongBranchingScores(), simulation_time_budget=3600, pool: MpiPool=MpiPool()):
         super().__init__()
         self.play_out_observer = play_out_observer
         self.simulation_time_budget = simulation_time_budget
@@ -47,7 +47,7 @@ class MctsObserver(Observer):
         )
 
         while init_time + self.simulation_time_budget > time.time():
-            node = root.select(math.sqrt(2))
+            node = root.select(0.2)
             action_history.clear()
             node.get_action_sequence(action_history)
             env.seed(0)
@@ -58,6 +58,7 @@ class MctsObserver(Observer):
             history_index = 0
 
             expand_action = None
+            expanded_node = None
             print(action_history)
             while not done:
                 if history_index < len(action_history):
@@ -70,7 +71,7 @@ class MctsObserver(Observer):
                     # assert action in action_set
                 else:
                     if expand_action is not None:
-                        node.expand(expand_action, action_set)
+                        expanded_node = node.expand(expand_action, action_set)
                         expand_action = None
 
                     action = action_set[observation[action_set].argmax()]
@@ -81,6 +82,7 @@ class MctsObserver(Observer):
                 observation, action_set, _, done, info = env.step(action)
                 nb_nodes += info["nb_nodes"]
 
+            expanded_node.reward(-nb_nodes)
             print(nb_nodes)
 
     def before_reset(self, model):
@@ -103,14 +105,14 @@ class MctsNode:
         self.parent = parent
         self.action = action
 
-        self.possible_actions = possible_actions
+        self.possible_actions = list(possible_actions)
         self.children = []
 
     def select(self, exploration_weight):
         if self.is_leaf():
             return self
 
-        values = np.array([child.ucb_values(exploration_weight) for child in self.children])
+        values = np.array([child.ucb_value(exploration_weight) for child in self.children])
         node = self.children[values.argmax()]
         return node.select(exploration_weight)
 
@@ -118,11 +120,11 @@ class MctsNode:
         if self.visits == 0:
             return float('inf')  # Handle unvisited nodes (division by zero)
 
-        exploitation_term = self.total_reward / self.visits
-        exploration_term = exploration_weight * math.sqrt(math.log(self.parent.visits) / self.visits)
+        #exploitation_term = self.total_reward / self.visits
+        #exploration_term = exploration_weight * math.sqrt(math.log(self.parent.visits) / self.visits)
 
-        ucb = exploitation_term + exploration_term
-        return ucb
+        #ucb = exploitation_term + exploration_term
+        return self.total_reward / self.visits * (1-exploration_weight*math.sqrt(math.log(self.parent.visits) / self.visits))
 
     def is_leaf(self):
         return len(self.possible_actions) > 0
@@ -140,6 +142,7 @@ class MctsNode:
         child = MctsNode(self, action, new_actions)
         self.children.append(child)
         self.possible_actions.remove(action)
+        return child
 
     def get_action_sequence(self, seq=None):
         if self.action is None:
