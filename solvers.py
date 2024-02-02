@@ -36,7 +36,7 @@ class Solver:
 
 class EcoleSolver(Solver):
 
-    def __init__(self, score_observer: Observer, additional_observers=[], scip_params={}, before_start_callbacks=[],
+    def __init__(self, score_observer: Observer, scip_params={}, additional_observers=[], before_start_callbacks=[],
                  before_action_callbacks=[]):
         super().__init__()
         self.observer = score_observer
@@ -66,6 +66,7 @@ class EcoleSolver(Solver):
         m.setParam("display/verblevel", 0)
         m.readProblem(path)
         instance: ecole.scip.Model = ecole.scip.Model.from_pyscipopt(m)
+        self.observer.reset(path)
         self.before_start(path)
         self.env.seed(0)
 
@@ -76,6 +77,7 @@ class EcoleSolver(Solver):
         nb_nodes = info["nb_nodes"]
         while not done:
             action = self.get_action(action_set, observation)
+            self.observer.step(action)
             self.before_action(action, action_set, observation)
             observation, action_set, _, done, info = self.env.step(action)
             self.model = self.env.model.as_pyscipopt()

@@ -26,20 +26,8 @@ class DatasetGenerator:
             )
         ])))
 
-        env = HistoryBranchingEnvironment(
-            observation_function=(
-                self.observer,
-                state_observer
-            ),
-            information_function={
-                "nb_nodes": ecole.reward.NNodes(),
-                "time": ecole.reward.SolvingTime(),
-            },
-            **kwargs
-        )
 
-
-        self.solver = EcoleSolver(env)
+        self.solver = EcoleSolver(self.observer, additional_observers=[state_observer], **kwargs)
         self.instances = instances
         self.sample_counter = sample_counter
         self.episode_counter = episode_counter
@@ -70,10 +58,6 @@ class DatasetGenerator:
         count=0
         while ( max_samples<0 or self.sample_counter < max_samples) and (max_instances<0 or count<max_instances):
             try:
-                # not very beautiful
-                if isinstance(self.expert_observer, HistoricalObserver):
-                    self.expert_observer.reset(prob_file.name, 0)
-
                 instance = next(self.instances)
                 self.episode_counter += 1
                 count += 1

@@ -1,6 +1,7 @@
 import ecole.instance
 
 from datasetGenerator import DatasetGenerator
+from mpi import MpiPool
 from observer import LiftedObserver, StrongBranching
 from solvers import *
 
