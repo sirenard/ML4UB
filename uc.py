@@ -65,11 +65,10 @@ class UcigGenerator:
         system = model_data["system"]
         elements = model_data["elements"]
 
-        time_periods = list(range(1, n_splits+1))
-        time_periods = list(range(n_splits))
+        time_periods = list(range(n_splits*days))
 
-        system["reserve_requirement"] = {"data_type": "time_series", "values": dict(zip(range(1,1+len(data["SpinningReserve"])),data["SpinningReserve"]))}
-        system["reserve_requirement"] = {"data_type": "time_series", "values": data["SpinningReserve"]}
+        #system["reserve_requirement"] = {"data_type": "time_series", "values": dict(zip(range(1,1+len(data["SpinningReserve"])),data["SpinningReserve"]))}
+        system["reserve_requirement"] = {"data_type": "time_series", "values": data["SpinningReserve"]*days}
         system["time_keys"] = time_periods
         system["baseMVA"] = 1.
         system["time_period_length_minutes"] = 60
@@ -116,7 +115,7 @@ class UcigGenerator:
 
         self.model_data = model_data
         self.loads = data["Loads"]
-        self.horizon = n_splits*days
+        self.days = days
         self.count = start_at_instance
 
     def __iter__(self):
@@ -126,7 +125,9 @@ class UcigGenerator:
         if self.count > len(self.loads):
             raise StopIteration
 
-        load = self.loads[self.count]
+        load = []
+        for d in range(self.days):
+            load += self.loads[self.count+d]
 
         #load_dic: dict = self.model_data["elements"]["load"]["demand"]["p_load"]["values"]
         #load_dic.clear()
@@ -136,7 +137,7 @@ class UcigGenerator:
         self.model_data["elements"]["load"]["demand"]["p_load"]["values"] = load
 
         m = ModelData(self.model_data)
-        self.count += 1
+        self.count += self.days
 
         pyomo_model = egret.models.unit_commitment.create_CA_unit_commitment_model(m)
         pyomo_model.write("prob.lp")
