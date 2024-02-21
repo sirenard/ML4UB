@@ -5,8 +5,7 @@ from pathlib import Path
 import numpy as np
 import ecole.observation
 
-from environments import HistoryBranchingEnvironment
-from observer import ConditionalObservers, UnrealisticObserver, LiftedObserver
+from observer import ConditionalObservers
 from solvers import EcoleSolver
 
 
@@ -35,7 +34,7 @@ class DatasetGenerator:
         for _ in range(self.episode_counter):
             next(self.instances)
 
-    def generate(self, folder_name, max_samples=-1, max_instances=-1):
+    def generate(self, folder_name, max_samples=-1, max_instances=-1, sample_prefix=""):
         Path(folder_name).mkdir(parents=True, exist_ok=True)
         assert max_samples > 0 or max_instances > 0, "One of these parameters must be > 0"
 
@@ -46,7 +45,7 @@ class DatasetGenerator:
             if scores_are_expert and (max_samples<0 or self.sample_counter < max_samples):
                 self.sample_counter += 1
                 data = [node_observation, action, action_set, scores]
-                filename = f"{folder_name}/sample_{self.sample_counter}.pkl"
+                filename = f"{folder_name}/sample{sample_prefix}_{self.sample_counter}.pkl"
 
                 with gzip.open(filename, "wb") as f:
                     pickle.dump(data, f)
