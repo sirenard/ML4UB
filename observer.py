@@ -1,4 +1,5 @@
 import math
+import pickle
 import tempfile
 from itertools import repeat
 
@@ -12,6 +13,7 @@ import utils
 from environments import HistoryBranchingEnvironment
 from model import load_policy, get_device
 from mpi import MpiPool
+from ranking_model import RankSVM
 
 
 class Observer:
@@ -63,16 +65,18 @@ class RandomObserver(Observer):
 class LiftedObserver(Observer):
     tmp_observer = None
 
-    def __init__(self, observer=ecole.observation.StrongBranchingScores(), scip_params={}, pool: MpiPool = MpiPool()):
+    def __init__(self, observer=ecole.observation.StrongBranchingScores(), scip_params={}, pool: MpiPool = MpiPool(), score_method=None):
         super().__init__()
         self.instance_path = None
         self.action_history = []
         self.scip_params = scip_params
         self.pool: MpiPool = pool
         self.observer = observer
+        self.score_method = score_method
 
     def before_reset(self, model):
         self.action_history = []
+        self.observer.before_reset(model)
         LiftedObserver.tmp_observer = self.observer
         l = lambda: HistoryBranchingEnvironment(
             observation_function=self.observer,
@@ -100,7 +104,17 @@ class LiftedObserver(Observer):
         res = self.pool.map(self.get_score, args, on_state=True)
 
         scores = np.array(res)
-        scores = scores / np.linalg.norm(scores)
+
+        match self.score_method:
+            case "n":
+                scores = scores / np.linalg.norm(scores)
+            case "b":
+                expert_scores = self.observer.extract(model, done)
+                expert_action = expert_scores[prob_indexes].argmax()
+                scores = (scores >= scores[expert_action]).astype(int)
+            case _:
+                scores = scores
+
 
         res = np.zeros(n_vars)
         res[:] = np.nan
@@ -306,7 +320,7 @@ class GnnObserver(Observer):
         self.__init__(state)
 
     def __str__(self):
-        return f"GNN({self.policy_path}"
+        return f"GNN({self.policy_path})"
 
 
 class DistObserver(Observer):
@@ -435,6 +449,36 @@ class DistObserver(Observer):
     def __str__(self):
         return "dist"
 
+class SVMObserver(Observer):
+    def __init__(self, rank_svm_path, feature_observer = ecole.observation.Khalil2016()):
+        super().__init__()
+        with open(rank_svm_path, "rb") as f:
+            self.model = pickle.load(f)
+
+        self.feature_observer = feature_observer
+
+    def before_reset(self, model):
+        self.feature_observer.before_reset(model)
+
+    def extract(self, model, done):
+        m = model.as_pyscipopt()
+        n_vars = int(m.getNVars())
+        candidates, *_ = m.getLPBranchCands()
+
+        prob_indexes = [var.getCol().getLPPos() for var in candidates]
+        features = self.feature_observer.extract(model, done)
+        X = np.nan_to_num(features.features[prob_indexes])
+        indexes = self.model.predict(X)
+        scores = [0 for _ in candidates]
+        for i, j in enumerate(indexes):
+            scores[j] = len(indexes)-i
+
+        res = np.zeros(n_vars)
+        res[:] = np.nan
+        res[prob_indexes] = scores
+
+        return res
+
 
 class ConditionalObservers(Observer):
     def __init__(self, observers, conditions):
@@ -461,12 +505,14 @@ class ConditionalObservers(Observer):
     def step(self, action):
         super().step(action)
         for observer in self.observers:
-            observer.step(action)
+            if isinstance(observer, Observer):
+                observer.step(action)
 
     def reset(self, instance_path, seed=None):
         super().reset(instance_path, seed)
         for observer in self.observers:
-            observer.step(instance_path, seed)
+            if isinstance(observer, Observer):
+                observer.reset(instance_path, seed)
 
     def get_last_observer_index_used(self):
         return self.last_observer_index_used
@@ -474,3 +520,4 @@ class ConditionalObservers(Observer):
     def __str__(self):
         s = ", ".join([str(observer) for observer in self.observers])
         return f"Cond({s})"
+
