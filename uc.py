@@ -10,6 +10,11 @@ import egret.data.model_data as md
 
 from egret.data.model_data import ModelData
 
+"""
+Generate unit commitment instances from a Ucig file that contains 1 problems with n days.
+The generator split the problem in problems with limited number of days.
+Thus the instances share the same generators while the demand of each problems changes
+"""
 class UcigGenerator:
     def __init__(self, file_path, days=1, start_at_instance=0):
         """

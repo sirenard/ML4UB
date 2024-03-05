@@ -72,17 +72,17 @@ def evaluate_solvers(solvers: [Solver], instances, n_instances, metrics):
         output_control.unmute()
 
         print(f"{i:<15}", end="")
-        try:
-            for j, solver in enumerate(solvers):
-                solver.solve(prob_file.name)
-                line = [solver[metric] for metric in metrics]
-                for k, d in enumerate(line):
-                    data[i, j, k] = d
-                print("".join([f"{d:{'<15.3f' if type(d)==float else '<15'}}" for d in line]), end="", flush=True)
-        except Exception as e:
-            crashed_instance_indexes.append(i)
-            print(e, file=sys.stderr)
-            print("CRASH", end="")
+        # try:
+        for j, solver in enumerate(solvers):
+            solver.solve(prob_file.name)
+            line = [solver[metric] for metric in metrics]
+            for k, d in enumerate(line):
+                data[i, j, k] = d
+            print("".join([f"{d:{'<15.3f' if type(d)==float else '<15'}}" for d in line]), end="", flush=True)
+        # except Exception as e:
+        #     crashed_instance_indexes.append(i)
+        #     print(e, file=sys.stderr)
+        #     print("CRASH", end="")
 
         data = np.delete(data, crashed_instance_indexes, axis=0)
 

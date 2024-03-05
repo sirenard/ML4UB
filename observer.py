@@ -112,6 +112,11 @@ class LiftedObserver(Observer):
                 expert_scores = self.observer.extract(model, done)
                 expert_action = expert_scores[prob_indexes].argmax()
                 scores = (scores >= scores[expert_action]).astype(int)
+            case "speedup":
+                expert_scores = self.observer.extract(model, done)
+                expert_action = expert_scores[prob_indexes].argmax()
+                expert_value = scores[expert_action]
+                scores = np.log2((expert_value+1)/(scores+1))
             case _:
                 scores = scores
 
@@ -472,6 +477,34 @@ class SVMObserver(Observer):
         scores = [0 for _ in candidates]
         for i, j in enumerate(indexes):
             scores[j] = len(indexes)-i
+
+        res = np.zeros(n_vars)
+        res[:] = np.nan
+        res[prob_indexes] = scores
+
+        return res
+
+
+class LinearObserver(Observer):
+    def __init__(self, model_path, feature_observer = ecole.observation.Khalil2016()):
+        super().__init__()
+        with open(model_path, "rb") as f:
+            self.model = pickle.load(f)
+
+        self.feature_observer = feature_observer
+
+    def before_reset(self, model):
+        self.feature_observer.before_reset(model)
+
+    def extract(self, model, done):
+        m = model.as_pyscipopt()
+        n_vars = int(m.getNVars())
+        candidates, *_ = m.getLPBranchCands()
+
+        prob_indexes = [var.getCol().getLPPos() for var in candidates]
+        features = self.feature_observer.extract(model, done)
+        X = np.nan_to_num(features.features[prob_indexes])
+        scores = self.model.predict(X)
 
         res = np.zeros(n_vars)
         res[:] = np.nan

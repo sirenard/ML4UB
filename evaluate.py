@@ -1,45 +1,56 @@
 import pickle
 
+import ecole.instance
+
+import linear_model
 from evaluation_tools import evaluate_solvers
 from model import train
-from observer import LiftedObserver, StrongBranching, GnnObserver
+import ranking_model
+from observer import LiftedObserver, StrongBranching, GnnObserver, SVMObserver, LinearObserver
 from solvers import *
 
 from uc import UcigGenerator
 
 
 def main(pool = None):
-    instances = UcigGenerator("instances", start_at_instance=5000)
+    instances = UcigGenerator("instances", start_at_instance=5000, days=1)
+    #instances = ecole.instance.CapacitatedFacilityLocationGenerator(n_customers=90, n_facilities=90)
 
     n_instances = 30
 
     scip_params = {
         "limits/nodes":20000,
+        #"limits/time": 30,
     }
 
     scip_params_ub = {
         "limits/nodes": 5000,
     }
 
-    #policy = train("ub_0_0.5", 0.001, 50, "ub_0_0.5.pkl")
+    #policy = train("ub_2_0.6", 0.001, 15, "ub_2_0.6.pkl")
+    #policy = train("ub_0_1_limit_20_alpha2_none", 0.001, 15, "ub_0_1_limit_20_alpha2_none.pkl")
+    #policy = train("ub_0_1_limit_20_alpha2_0.1", 0.001, 15, "ub_0_1_limit_20_alpha2_0.1.pkl")
+    #rank_model = ranking_model.train("test", "test.pkl")
+    #model = linear_model.train("test", "test.pkl")
 
 
     solvers = [
         ClassicSolver("vanillafullstrong", scip_params),
-        ClassicSolver("relpscost", scip_params),
-        EcoleSolver(StrongBranching(), scip_params),
-	    #EcoleSolver(GnnObserver("sb_0.5.pkl"), scip_params=scip_params),
-	    #GnnSolver("ub_0_0.5.pkl", scip_params),
-        #LiftedSolver(scip_params, GnnObserver("sb_0.5.pkl", try_use_gpu=False), scip_params_ub, pool),
-        #LiftedSolver(scip_params, StrongBranching(), scip_params_ub, pool),
-        EcoleSolver(GnnObserver("sb_0.5.pkl", try_use_gpu=False), scip_params),
-        EcoleSolver(
-                LiftedObserver(GnnObserver("sb_0.5.pkl"), scip_params_ub, pool),
-        ),
-        EcoleSolver(
-            LiftedObserver(StrongBranching(), scip_params_ub, pool),
-        )
-        #GnnSolver("ub_1_0.5.pkl", scip_params),
+        #ClassicSolver("relpscost", scip_params),
+        #EcoleSolver(GnnObserver("sb_0.5.pkl", try_use_gpu=True), scip_params=scip_params),
+        EcoleSolver(GnnObserver("ub_1_0.6.pkl", try_use_gpu=True), scip_params),
+        EcoleSolver(GnnObserver("ub_2_0.6_8.pkl", try_use_gpu=True), scip_params),
+        # EcoleSolver(GnnObserver("ub_0_1_limit_20_alpha2_0.1.pkl", try_use_gpu=False), scip_params),
+
+        #EcoleSolver(LinearObserver("test.pkl"), scip_params),
+        #EcoleSolver(SVMObserver("test.pkl"), scip_params),
+
+        # EcoleSolver(
+        #      LiftedObserver(StrongBranching(), scip_params_ub, pool),
+        # ),
+        # EcoleSolver(
+        #     LiftedObserver(GnnObserver("ub_1_0.6.pkl", try_use_gpu=False), scip_params_ub, pool),
+        # ),
     ]
 
 

@@ -6,6 +6,7 @@ import numpy as np
 
 from sklearn import svm, linear_model
 from sklearn.model_selection import KFold
+from lightgbm import LGBMRanker
 
 from model import get_sample_files
 
@@ -65,7 +66,7 @@ def train(data_path, save_path):
     X = []
     Y = []
 
-    for qid, file in zip(range(10), files):
+    for qid, file in zip(range(100), files):
         with gzip.open(file, "rb") as f:
             f, _, action_set, scores = pickle.load(f)
             features = f.features
@@ -88,6 +89,14 @@ def train(data_path, save_path):
         pickle.dump(rank_svm, f)
 
     return rank_svm
+
+    # model = LGBMRanker()
+    # YS = Y[:, 0]
+    # qids = Y[:, 1]
+    # model.fit(X[train], YS[train], group=qids[train])
+    #
+    # with open(save_path, "wb") as f:
+    #     pickle.dump(model, f)
 
 
 
