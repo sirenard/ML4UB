@@ -2,6 +2,7 @@ import gzip
 import pickle
 
 import numpy as np
+import pyscipopt
 from sklearn.model_selection import KFold
 
 from model import get_sample_files
@@ -81,3 +82,58 @@ def train(data_path, save_path):
         pickle.dump(model, f)
 
     return model
+
+
+def train2(data_path, save_path):
+    files = get_sample_files(data_path)
+    X = []
+    Y = []
+    index = 0
+
+    for qid, file in enumerate(files):
+        with gzip.open(file, "rb") as f:
+            f, vars_val, lp_obj, obj = pickle.load(f)
+            features = np.array(vars_val)
+
+            score = -(lp_obj-obj)/lp_obj
+
+            X.append(features)
+            Y.append(score)
+
+    cv = KFold(n_splits=5)
+
+    X = np.array(X)
+
+    pos = np.where(X==0)
+    for i,j in zip(*pos):
+        X[i,j] = 0.001
+
+
+    Y = np.array(Y)
+
+
+    train, test = cv.split(X, Y).__next__()
+
+
+    model = LinearRegression()
+    model.fit(X[train], Y[train])
+
+    print('score: ', model.score(X[test], Y[test]) )
+
+    ys = model.predict(X[test])
+
+    with open(save_path, "wb") as f:
+        pickle.dump(model, f)
+
+    return model
+
+
+def get_limit(model, m: pyscipopt.Model):
+    features = []
+    for var in m.getVars():
+        features.append(var.getLPSol())
+
+    return (1+model.predict(features)) * m.getLPObjVal()
+
+if __name__ == '__main__':
+    train2("bounds", "test.pkl")

@@ -5,6 +5,8 @@ from pathlib import Path
 import numpy as np
 import ecole.observation
 
+import reward
+import utils
 from observer import ConditionalObservers
 from solvers import EcoleSolver
 
@@ -70,3 +72,43 @@ class DatasetGenerator:
                 print(f"Crash on episode {self.episode_counter}")
 
         prob_file.close()
+
+
+class ParameterDatasetGenerator:
+    def __init__(self, instances,  state_observer=ecole.observation.Khalil2016(), seed=None, sample_counter=0, scip_params={}):
+        self.rng = np.random.default_rng(seed)
+
+
+        self.instances = instances
+        self.sample_counter = sample_counter
+
+        self.env = ecole.environment.Branching(
+            scip_params={"limits/nodes": 1},
+            observation_function=(state_observer,reward.LpReward()),
+            reward_function=None,
+            information_function=None,
+        )
+
+    def generate(self, folder_name, max_instances, sample_prefix=""):
+        Path(folder_name).mkdir(parents=True, exist_ok=True)
+
+
+        count=0
+        while count<max_instances:
+            count += 1
+            instance = next(self.instances)
+            (state, (lp_obj, vars)), _, _, _, _ = self.env.reset(instance)
+
+            obj = utils.get_objval_from_existing_model(self.env.model.as_pyscipopt())
+
+            self.sample_counter += 1
+            data = [state, vars, lp_obj, obj]
+            filename = f"{folder_name}/sample{sample_prefix}_{self.sample_counter}.pkl"
+
+            with gzip.open(filename, "wb") as f:
+                pickle.dump(data, f)
+
+            print(f"Episode {count}")
+
+
+

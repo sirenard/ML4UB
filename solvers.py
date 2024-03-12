@@ -113,15 +113,15 @@ class EcoleSolver(Solver):
 
 
 class ClassicSolver(Solver):
-    def __init__(self, branching_policy, scip_params={}):
+    def __init__(self, branching_policy, scip_params={}, **kwargs):
         super().__init__()
         self.model = pyscipopt.Model()
         self.branching_policy = branching_policy
-        self.configure()
+        self.configure(**kwargs)
         self.model.setParams(scip_params)
 
-    def configure(self):
-        utils.configure(self.model, branching_policy=self.branching_policy)
+    def configure(self, **kwargs):
+        utils.configure(self.model, branching_policy=self.branching_policy, **kwargs)
 
     def solve(self, path: str):
         self.model.readProblem(path)

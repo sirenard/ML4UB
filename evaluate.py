@@ -13,34 +13,56 @@ from uc import UcigGenerator
 
 
 def main(pool = None):
-    instances = UcigGenerator("instances", start_at_instance=5000, days=1)
-    #instances = ecole.instance.CapacitatedFacilityLocationGenerator(n_customers=90, n_facilities=90)
+    #instances = UcigGenerator("instances", start_at_instance=5000, days=3)
+    instances = ecole.instance.SetCoverGenerator(n_rows=500, n_cols=1000)
+    instances.seed(12)
 
-    n_instances = 30
+    n_instances = 10
 
     scip_params = {
-        "limits/nodes":20000,
-        #"limits/time": 30,
+        #"limits/nodes":20000,
+        # "limits/time": 120,
     }
 
     scip_params_ub = {
         "limits/nodes": 5000,
     }
 
-    #policy = train("ub_2_0.6", 0.001, 15, "ub_2_0.6.pkl")
+    # policy = train("sc_sb_0.6", 0.001, 15, "sc_sb_0.6.pkl")
     #policy = train("ub_0_1_limit_20_alpha2_none", 0.001, 15, "ub_0_1_limit_20_alpha2_none.pkl")
     #policy = train("ub_0_1_limit_20_alpha2_0.1", 0.001, 15, "ub_0_1_limit_20_alpha2_0.1.pkl")
     #rank_model = ranking_model.train("test", "test.pkl")
     #model = linear_model.train("test", "test.pkl")
 
+    with open("test.pkl", "rb") as f:
+        model = pickle.load(f)
+
+    def estimator(m: pyscipopt.scip.Model):
+        lp_obj = m.getLPObjVal()
+
+        features = []
+        for var in m.getVars():
+            features.append(var.getLPSol())
+
+        alpha = model.predict([features])[0]
+        if alpha < 0:
+            alpha=0
+
+        return (1+alpha)*lp_obj
+
+
+
 
     solvers = [
-        ClassicSolver("vanillafullstrong", scip_params),
-        #ClassicSolver("relpscost", scip_params),
-        #EcoleSolver(GnnObserver("sb_0.5.pkl", try_use_gpu=True), scip_params=scip_params),
-        EcoleSolver(GnnObserver("ub_1_0.6.pkl", try_use_gpu=True), scip_params),
-        EcoleSolver(GnnObserver("ub_2_0.6_8.pkl", try_use_gpu=True), scip_params),
-        # EcoleSolver(GnnObserver("ub_0_1_limit_20_alpha2_0.1.pkl", try_use_gpu=False), scip_params),
+        # ClassicSolver("vanillafullstrong", scip_params),
+        ClassicSolver("boundbranch", scip_params),
+        ClassicSolver("relpscost", scip_params),
+        # EcoleSolver(GnnObserver("sb_0.5.pkl", try_use_gpu=True), scip_params=scip_params),
+        #EcoleSolver(GnnObserver("ub_0_0.6.pkl", try_use_gpu=True), scip_params),
+        # EcoleSolver(GnnObserver("ub_0_speedup_0.6.pkl", try_use_gpu=True), scip_params),
+        # EcoleSolver(GnnObserver("ub_2_0.6_8.pkl", try_use_gpu=True), scip_params),
+        # EcoleSolver(GnnObserver("ub_1_speedup_0.6.pkl", try_use_gpu=True), scip_params),
+        # EcoleSolver(GnnObserver("sc_sb_0.6.pkl", try_use_gpu=True), scip_params),
 
         #EcoleSolver(LinearObserver("test.pkl"), scip_params),
         #EcoleSolver(SVMObserver("test.pkl"), scip_params),
