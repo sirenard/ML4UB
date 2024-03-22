@@ -2,19 +2,27 @@ import ecole.instance
 
 from datasetGenerator import DatasetGenerator
 from mpi import MpiPool
-from observer import LiftedObserver, StrongBranching
+from observer import LiftedObserver, StrongBranching, GnnObserver
 from solvers import *
 
 from uc import UcigGenerator
+import argparse
 
 
 def main(pool: MpiPool = None):
-    instances = UcigGenerator("instances")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--sample_prefix", type=str, default="", required=False)
+    parser.add_argument("--start_at", type=int, default=0, required=False)
+    args = parser.parse_args()
 
-    expert_probability = 0.5
+    # instances = UcigGenerator("instances", start_at_instance=args.start_at)
+    instances = ecole.instance.SetCoverGenerator(n_rows=500, n_cols=1000)
+    instances.seed(args.start_at)
+
+    expert_probability = 0.05
 
     scip_params = {
-        "limits/nodes": 200,
+        # "limits/nodes": 200,
     }
 
     scip_params_ub = {
@@ -24,16 +32,22 @@ def main(pool: MpiPool = None):
 
     generator = DatasetGenerator(
         instances,
-        expert_observer=LiftedObserver(observer=StrongBranching(), scip_params=scip_params_ub, pool=pool),
+        #expert_observer=LiftedObserver(observer=StrongBranching(), scip_params=scip_params_ub, pool=pool, score_method="n"),
+        #expert_observer=LiftedObserver(observer=GnnObserver("sb_0.5.pkl", try_use_gpu=False), scip_params=scip_params_ub, pool=pool),
+        expert_observer=StrongBranching(),
         exploration_observer=ecole.observation.Pseudocosts(),
         expert_probability=expert_probability,
+        #state_observer=ecole.observation.Khalil2016(),
         scip_params=scip_params,
         )
-    generator.generate(f"ub_0_{expert_probability}", max_instances=1000)
+    #generator.generate(f"ub_0_{expert_probability}", max_instances=2, sample_prefix=args.sample_prefix)
+    generator.generate(f"sc_sb_{expert_probability}", max_instances=400, sample_prefix=args.sample_prefix)
+    #generator.generate(f"sb_test", max_instances=250, sample_prefix=args.sample_prefix)
 
 
 
 if __name__ == "__main__":
+
     t = time.time()
     utils.mpi_start(main)
     t = time.time() - t

@@ -330,7 +330,7 @@ def train(sample_folder: str, learning_rate: float, n_epochs: int, output="agent
         valid_loss, valid_acc = process(policy, valid_loader, None)
         print(f"Valid loss: {valid_loss:0.3f}, accuracy {valid_acc:0.3f}")
 
-    torch.save(policy.state_dict(), output)
+        torch.save(policy.state_dict(), output)
 
     return policy
 
@@ -344,37 +344,6 @@ def load_policy(filename, try_use_gpu=False):
     policy.load_state_dict(torch.load(filename, map_location=map_location))
     return policy
 
-def evaluate(instances, n_instances, env, default_env, policy):
-    for instance_count, instance in zip(range(n_instances), instances):
-        # Run the GNN brancher
-        nb_nodes, time = 0, 0
-        observation, action_set, _, done, info = env.reset(instance)
-        nb_nodes += info["nb_nodes"]
-        time += info["time"]
-        while not done:
-            with torch.no_grad():
-                observation = (
-                    torch.from_numpy(observation.row_features.astype(np.float32)).to(DEVICE),
-                    torch.from_numpy(observation.edge_features.indices.astype(np.int64)).to(DEVICE),
-                    torch.from_numpy(observation.edge_features.values.astype(np.float32)).view(-1, 1).to(DEVICE),
-                    torch.from_numpy(observation.variable_features.astype(np.float32)).to(DEVICE),
-                )
-                logits = policy(*observation)
-                action = action_set[logits[action_set.astype(np.int64)].argmax()]
-                observation, action_set, _, done, info = env.step(action)
-            nb_nodes += info["nb_nodes"]
-            time += info["time"]
-
-        # Run SCIP's default brancher
-        default_env.reset(instance)
-        _, _, _, _, default_info = default_env.step({})
-
-        print(
-            f"Instance {instance_count: >3} | SCIP nb nodes    {int(default_info['nb_nodes']): >4d}  | SCIP time   {default_info['time']: >6.2f} ")
-        print(f"             | GNN  nb nodes    {int(nb_nodes): >4d}  | GNN  time   {time: >6.2f} ")
-        print(
-            f"             | Gain         {100 * (1 - nb_nodes / default_info['nb_nodes']): >8.2f}% | Gain      {100 * (1 - time / default_info['time']): >8.2f}%")
-
 
 def get_sample_files(folder: str):
-    return [str(path) for path in Path("{}/".format(folder)).glob("sample_*.pkl")]
+    return [str(path) for path in Path("{}/".format(folder)).glob("sample*.pkl")]

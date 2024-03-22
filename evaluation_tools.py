@@ -55,7 +55,7 @@ class Data:
         plt.title(f"Performance profile w.r.t. {metric}")
         plt.show()
 
-def evaluate_solvers(solvers: [Solver], instances, n_instances, metrics, catch_errors=True):
+def evaluate_solvers(solvers: [Solver], instances, n_instances, metrics):
     print(f"{'Instance':<15}" + "".join([f"{str(solver):<{15*len(metrics)}}" for solver in solvers]))
     print(f"{'':<15}" + len(solvers)*("".join([f"{metric:<15}" for metric in metrics])))
     output_control = utils.OutputControl()
@@ -72,19 +72,17 @@ def evaluate_solvers(solvers: [Solver], instances, n_instances, metrics, catch_e
         output_control.unmute()
 
         print(f"{i:<15}", end="")
-        try:
-            for j, solver in enumerate(solvers):
-                solver.solve(prob_file.name)
-                line = [solver[metric] for metric in metrics]
-                for k, d in enumerate(line):
-                    data[i, j, k] = d
-                print("".join([f"{d:{'<15.3f' if type(d)==float else '<15'}}" for d in line]), end="", flush=True)
-        except Exception as e:
-            if not catch_errors:
-                raise e
-            crashed_instance_indexes.append(i)
-            print(e, file=sys.stderr)
-            print("CRASH", end="")
+        # try:
+        for j, solver in enumerate(solvers):
+            solver.solve(prob_file.name)
+            line = [solver[metric] for metric in metrics]
+            for k, d in enumerate(line):
+                data[i, j, k] = d
+            print("".join([f"{d:{'<15.3f' if type(d)==float else '<15'}}" for d in line]), end="", flush=True)
+        # except Exception as e:
+        #     crashed_instance_indexes.append(i)
+        #     print(e, file=sys.stderr)
+        #     print("CRASH", end="")
 
         data = np.delete(data, crashed_instance_indexes, axis=0)
 
