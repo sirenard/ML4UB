@@ -139,16 +139,13 @@ class LiftedObserver(Observer):
         while not done:
             if history_index < len(action_history):
                 action = action_history[history_index]
-                # assert action in action_set
             elif history_index == len(action_history):
                 action = action_index
-                # assert action in action_set
             else:
                 action = action_set[observation[action_set].argmax()]
 
             history_index += 1
 
-            # print(action, action_set)
             observation, action_set, _, done, info = env.step(action)
             nb_nodes += info["nb_nodes"]
 

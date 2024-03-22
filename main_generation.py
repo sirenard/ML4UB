@@ -15,12 +15,14 @@ def main(pool: MpiPool = None):
     parser.add_argument("--start_at", type=int, default=0, required=False)
     args = parser.parse_args()
 
-    instances = UcigGenerator("instances", start_at_instance=args.start_at)
+    # instances = UcigGenerator("instances", start_at_instance=args.start_at)
+    instances = ecole.instance.SetCoverGenerator(n_rows=500, n_cols=1000)
+    instances.seed(args.start_at)
 
-    expert_probability = 1
+    expert_probability = 0.05
 
     scip_params = {
-        "limits/nodes": 200,
+        # "limits/nodes": 200,
     }
 
     scip_params_ub = {
@@ -39,7 +41,8 @@ def main(pool: MpiPool = None):
         scip_params=scip_params,
         )
     #generator.generate(f"ub_0_{expert_probability}", max_instances=2, sample_prefix=args.sample_prefix)
-    generator.generate(f"sb_test", max_instances=250, sample_prefix=args.sample_prefix)
+    generator.generate(f"sc_sb_{expert_probability}", max_instances=400, sample_prefix=args.sample_prefix)
+    #generator.generate(f"sb_test", max_instances=250, sample_prefix=args.sample_prefix)
 
 
 
