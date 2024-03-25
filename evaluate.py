@@ -3,6 +3,7 @@ import pickle
 import ecole.instance
 
 import linear_model
+import mcts
 from evaluation_tools import evaluate_solvers
 from model import train
 import ranking_model
@@ -15,8 +16,8 @@ ecole.observation.NodeBipartite
 
 
 def main(pool = None):
-    # instances = UcigGenerator("instances", start_at_instance=5000, days=1)
-    instances = UcigGenerator("uc_hetrogeneous_10_1")
+    instances = UcigGenerator("instances", start_at_instance=5000, days=1)
+    # instances = UcigGenerator("uc_hetrogeneous_10_1")
 
     # instances = ecole.instance.SetCoverGenerator(n_rows=500, n_cols=1000)
     # instances = ecole.instance.IndependentSetGenerator()
@@ -39,16 +40,17 @@ def main(pool = None):
 
 
     solvers = [
-        # ClassicSolver("vanillafullstrong", scip_params),
-        ClassicSolver("relpscost", scip_params),
+        ClassicSolver("vanillafullstrong", scip_params),
+        # ClassicSolver("relpscost", scip_params),
         # EcoleSolver(GnnObserver("sc_sb_0.05.pkl", try_use_gpu=True), scip_params=scip_params),
         # EcoleSolver(GnnObserver("sc_0_speedup_0.6.pkl", try_use_gpu=True), scip_params=scip_params),
-        EcoleSolver(GnnObserver("sb_0.5.pkl", try_use_gpu=True), scip_params=scip_params),
+        # EcoleSolver(GnnObserver("sb_0.5.pkl", try_use_gpu=True), scip_params=scip_params),
         # EcoleSolver(GnnObserver("ub_2_0.6_8.pkl", try_use_gpu=True), scip_params),
         # EcoleSolver(GnnObserver("ub_1_speedup_0.6.pkl", try_use_gpu=True), scip_params),
         # EcoleSolver(GnnObserver("ub_0_speedup_0.6.pkl", try_use_gpu=True), scip_params),
         # EcoleSolver(GnnObserver("ub_1_speedup_0.6.pkl", try_use_gpu=True), scip_params),
-        EcoleSolver(GnnObserver("ub_2_speedup_0.6.pkl", try_use_gpu=True), scip_params),
+        # EcoleSolver(GnnObserver("ub_2_speedup_0.6.pkl", try_use_gpu=True), scip_params),
+        EcoleSolver(mcts.MctsObserver(simulation_count=100, limits_rollout=6), scip_params),
 
         # EcoleSolver(
         #      LiftedObserver(StrongBranching(), scip_params_ub, pool),
