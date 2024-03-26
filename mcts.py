@@ -11,7 +11,7 @@ import reward
 import utils
 from environments import HistoryBranchingEnvironment
 from mpi import MpiPool
-from observer import ConditionalObservers, RandomObserver, Observer
+from observer import ConditionalObservers, RandomObserver, Observer, StrongBranching
 from uc import UcigGenerator
 
 
@@ -53,13 +53,16 @@ class MonteCarloTreeSearch:
         self.root = Node(state)
         self.simulation_limit = simulation_limit
 
-    def best_action(self, simulations_count=200):
+    def get_actions(self, simulations_count=200):
         for i in range(simulations_count):
-            print(f"{i+1}/{simulations_count}")
+            # print(f"{i+1}/{simulations_count}")
             node = self.select_node()
             score = self.simulate(node)
             self.backpropagate(node, score)
-        return self.get_best_child().state.get_last_action()
+
+        actions = [child.state.get_last_action() for child in self.root.children]
+        scores = [child.score for child in self.root.children]
+        return actions, scores
 
     def select_node(self):
         current_node = self.root
@@ -101,14 +104,26 @@ class GameState:
         )
         self.env.seed(0)
 
+        if len(self.history) == 0:
+            observer = StrongBranching()
+            self.env.observation_function = observer
+
         observation, action_set, _, self.is_done, info = self.env.reset(instance)
         self.nb_nodes = info["nb_nodes"]
-        for action in history:
+        for i, action in enumerate(self.history):
             observation, action_set, _, self.is_done, info = self.env.step(action)
+            if i == len(self.history) - 2:
+                observer = StrongBranching()
+                observer.before_reset(self.env.model)
+                self.env.observation_function = observer
             self.nb_nodes += info["nb_nodes"]
 
 
-        self.possible_actions = action_set
+        self.possible_actions = self.filter(action_set, observation, 5)
+
+    def filter(self, actions, scores, n):
+        actions = sorted(actions, key=lambda action: scores [action])
+        return actions[:min(n, len(actions))]
 
     def clone(self):
         return GameState(self.history, self.instance)
@@ -125,11 +140,14 @@ class GameState:
         # Apply action to update state
         observation, action_set, _, self.is_done, info = self.env.step(action)
         self.nb_nodes += info["nb_nodes"]
-        self.possible_actions = action_set
+        self.possible_actions = self.filter(action_set, observation, 5)
+        self.history.append(action)
+
 
     def get_possible_states(self):
         # Return list of possible successor states
         res = [self.clone() for action in self.get_possible_actions()]
+
         for i, action in enumerate(self.get_possible_actions()):
             res[i].apply_action(action)
 
@@ -167,13 +185,24 @@ class MctsObserver(Observer):
 
     def extract(self, model, done):
         m: pyscipopt.Model = model.as_pyscipopt()
-        state = GameState(history=self.action_history, instance=self.file.name)
+        state = GameState(self.action_history, self.file.name)
         mcts = MonteCarloTreeSearch(state, simulation_limit=self.limits_rollout)
 
-        action = mcts.best_action(self.simulation_count)
+        actions, scores = mcts.get_actions(self.simulation_count)
+
+        candidates, *_ = m.getLPBranchCands()
+        n_vars = int(m.getNVars())
+
+        prob_indexes = sorted([var.getCol().getLPPos() for var in candidates])
+
+        res = np.zeros(n_vars)
+        res[:] = np.nan
+
+        res[prob_indexes] = 0
+        res[actions] = scores
 
 
-        return action
+        return res
 
     def __str__(self):
         return "Mcts"
