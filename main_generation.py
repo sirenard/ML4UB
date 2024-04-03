@@ -11,38 +11,34 @@ import argparse
 
 def main(pool: MpiPool = None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--sample_prefix", type=str, default="", required=False)
-    parser.add_argument("--start_at", type=int, default=0, required=False)
+    parser.add_argument("sample_prefix", type=str, default="")
+    parser.add_argument("start_at", type=int, default=0)
     args = parser.parse_args()
 
-    # instances = UcigGenerator("instances", start_at_instance=args.start_at)
-    instances = ecole.instance.SetCoverGenerator(n_rows=500, n_cols=1000)
-    instances.seed(args.start_at)
+    instances = UcigGenerator("uc_hetrogeneous_5_1", start_at_instance=args.start_at+1)
 
-    expert_probability = 0.05
+    expert_probability = 0.6
 
     scip_params = {
-        # "limits/nodes": 200,
+        "limits/nodes": 1000,
     }
 
     scip_params_ub = {
-        "limits/nodes": 500
+        "limits/nodes": 5000
     }
 
 
     generator = DatasetGenerator(
         instances,
-        #expert_observer=LiftedObserver(observer=StrongBranching(), scip_params=scip_params_ub, pool=pool, score_method="n"),
-        #expert_observer=LiftedObserver(observer=GnnObserver("sb_0.5.pkl", try_use_gpu=False), scip_params=scip_params_ub, pool=pool),
+        # expert_observer=LiftedObserver(observer=StrongBranching(), scip_params=scip_params_ub, pool=pool, score_method="speedup"),
+        #expert_observer=LiftedObserver(observer=GnnObserver("sc_sb_0.05.pkl", try_use_gpu=False), scip_params=scip_params_ub, pool=pool, score_method="speedup"),
         expert_observer=StrongBranching(),
         exploration_observer=ecole.observation.Pseudocosts(),
         expert_probability=expert_probability,
         #state_observer=ecole.observation.Khalil2016(),
         scip_params=scip_params,
         )
-    #generator.generate(f"ub_0_{expert_probability}", max_instances=2, sample_prefix=args.sample_prefix)
-    generator.generate(f"sc_sb_{expert_probability}", max_instances=400, sample_prefix=args.sample_prefix)
-    #generator.generate(f"sb_test", max_instances=250, sample_prefix=args.sample_prefix)
+    generator.generate(f"uc_hetrogeneous_5_1_sb_{expert_probability}", max_instances=250, sample_prefix=args.sample_prefix)
 
 
 
