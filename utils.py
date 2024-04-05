@@ -32,9 +32,9 @@ def get_ecole_model_from_file(path):
 
 
 def configure(model: pyscipopt.Model, branching_policy="vanillafullstrong"):
-    #model.setPresolve(PY_SCIP_PARAMSETTING.OFF)
-    #model.setSeparating(PY_SCIP_PARAMSETTING.OFF)
-    #model.setHeuristics(PY_SCIP_PARAMSETTING.OFF)
+    model.setPresolve(PY_SCIP_PARAMSETTING.OFF)
+    # model.setSeparating(PY_SCIP_PARAMSETTING.OFF)
+    # model.setHeuristics(PY_SCIP_PARAMSETTING.OFF)
 
     model.setParam("randomization/permutevars", False)
     model.setParam("randomization/lpseed", 1)

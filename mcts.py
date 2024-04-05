@@ -90,17 +90,26 @@ class MonteCarloTreeSearch:
 
 # Example Usage
 class GameState:
-    def __init__(self, history, instance):
+    def __init__(self, history, instance, width_limit=5, free_space=True):
         self.history = history[:]
         self.instance = instance
         self.is_done = False
+        self.width_limit = width_limit
+        self.env = None
+        self.build_env()
+        if free_space:
+            self.free_env()
+
+    def build_env(self):
+        if self.env is not None:
+            return
 
         self.env = HistoryBranchingEnvironment(
             observation_function=RandomObserver(),
             information_function={
                 "nb_nodes": ecole.reward.NNodes(),
-                },
-            scip_params={"estimation/method": 'c'}
+            },
+            scip_params={"estimation/method": 'w', "estimation/completiontype": 'm'}
         )
         self.env.seed(0)
 
@@ -108,7 +117,7 @@ class GameState:
             observer = StrongBranching()
             self.env.observation_function = observer
 
-        observation, action_set, _, self.is_done, info = self.env.reset(instance)
+        observation, action_set, _, self.is_done, info = self.env.reset(self.instance)
         self.nb_nodes = info["nb_nodes"]
         for i, action in enumerate(self.history):
             observation, action_set, _, self.is_done, info = self.env.step(action)
@@ -118,15 +127,17 @@ class GameState:
                 self.env.observation_function = observer
             self.nb_nodes += info["nb_nodes"]
 
+        self.possible_actions = self.filter(action_set, observation, self.width_limit)
 
-        self.possible_actions = self.filter(action_set, observation, 5)
+    def free_env(self):
+        self.env = None
 
     def filter(self, actions, scores, n):
         actions = sorted(actions, key=lambda action: scores [action])
         return actions[:min(n, len(actions))]
 
-    def clone(self):
-        return GameState(self.history, self.instance)
+    def clone(self, free_space=True):
+        return GameState(self.history, self.instance, self.width_limit, free_space=free_space)
 
     def is_terminal(self):
         # Implement terminal state check logic here
@@ -138,18 +149,24 @@ class GameState:
 
     def apply_action(self, action):
         # Apply action to update state
+        self.build_env()
         observation, action_set, _, self.is_done, info = self.env.step(action)
         self.nb_nodes += info["nb_nodes"]
-        self.possible_actions = self.filter(action_set, observation, 5)
+
+        if not self.is_done:
+            self.possible_actions = self.filter(action_set, observation, self.width_limit)
+        else:
+            self.possible_actions = []
         self.history.append(action)
 
 
     def get_possible_states(self):
         # Return list of possible successor states
-        res = [self.clone() for action in self.get_possible_actions()]
+        res = [self.clone(False) for action in self.get_possible_actions()]
 
         for i, action in enumerate(self.get_possible_actions()):
             res[i].apply_action(action)
+            res[i].free_env()
 
         return res
 
@@ -166,12 +183,12 @@ class GameState:
 
 
 class MctsObserver(Observer):
-    def __init__(self, estimation_method='w', simulation_count=100, limits_rollout=6 ):
+    def __init__(self, simulation_count=100, limits_rollout=6, width_limit=5 ):
         super().__init__()
-        self.estimation_method = estimation_method
         self.limits_rollout = limits_rollout
         self.simulation_count = simulation_count
         self.file = None
+        self.width_limit = width_limit
 
     def before_reset(self, model):
         if self.file is not None:
@@ -185,7 +202,7 @@ class MctsObserver(Observer):
 
     def extract(self, model, done):
         m: pyscipopt.Model = model.as_pyscipopt()
-        state = GameState(self.action_history, self.file.name)
+        state = GameState(self.action_history, self.file.name, self.width_limit)
         mcts = MonteCarloTreeSearch(state, simulation_limit=self.limits_rollout)
 
         actions, scores = mcts.get_actions(self.simulation_count)
