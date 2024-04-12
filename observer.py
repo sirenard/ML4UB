@@ -65,14 +65,14 @@ class RandomObserver(Observer):
 class LiftedObserver(Observer):
     tmp_observer = None
 
-    def __init__(self, observer=ecole.observation.StrongBranchingScores(), scip_params={}, pool: MpiPool = MpiPool(), score_method=None):
+    def __init__(self, observer=ecole.observation.StrongBranchingScores(), scip_params={}, pool: MpiPool = MpiPool(), score_method=None, node_limit=50):
         super().__init__()
-        self.instance_path = None
         self.action_history = []
         self.scip_params = scip_params
         self.pool: MpiPool = pool
         self.observer = observer
         self.score_method = score_method
+        self.node_limit = node_limit
 
     def before_reset(self, model):
         self.action_history = []
@@ -95,10 +95,13 @@ class LiftedObserver(Observer):
 
         prob_indexes = sorted([var.getCol().getLPPos() for var in candidates])
 
+        node_limit = m.getNNodes() + self.node_limit
+
         args = list(zip(
             prob_indexes,
             repeat(self.action_history),
-            repeat(self.instance_path)
+            repeat(self.instance_path),
+            repeat(node_limit)
         ))
 
         res = self.pool.map(self.get_score, args, on_state=True)
@@ -127,13 +130,17 @@ class LiftedObserver(Observer):
         return res
 
     @staticmethod
-    def get_score(env: ecole.environment.Environment, action_index, action_history, instance_path):
+    def get_score(env: ecole.environment.Environment, action_index, action_history, instance_path, node_limit):
         history_index = 0
         env.seed(0)
 
         nb_nodes, t = 0, 0
 
-        observation, action_set, _, done, info = env.reset(instance_path)
+        env.scip_params["limits/nodes"] = node_limit
+
+        observation, action_set, _, done, info = env.reset(
+            instance_path
+        )
         nb_nodes += info["nb_nodes"]
 
         while not done:
@@ -150,7 +157,14 @@ class LiftedObserver(Observer):
             nb_nodes += info["nb_nodes"]
 
         gap = info["gap"]
-        return -(1 + gap) * nb_nodes
+
+        model: pyscipopt.Model = env.model.as_pyscipopt()
+
+        if model.getGap() == 0:
+            return model.getNNodes()
+        else:
+            return model.getTreesizeEstimation()
+        # return -(1 + gap) * nb_nodes
 
     def __str__(self):
         return f"lifted({str(self.observer)})"
@@ -177,117 +191,6 @@ class StrongBranching(Observer):
         return "SB"
 
 
-class UnrealisticObserver(Observer):
-    def __init__(self, n_repetitions, seed=0, scip_params={}, local=False, pool: MpiPool = None):
-        super().__init__(seed)
-        self.n_repetitions = n_repetitions
-        self.rng = np.random.default_rng(seed)
-        self.pseudocosts_function = ecole.observation.Pseudocosts()
-        self.scip_params = scip_params
-        self.pool: MpiPool = pool
-        self.local = local
-
-    def extract(self, model, done):
-        self.extract_expert(model)
-
-    def extract_expert(self, model):
-        m: pyscipopt.Model = model.as_pyscipopt()
-        candidates, *_ = m.getLPBranchCands()
-        n_actions = len(candidates)
-        n_vars = int(m.getNVars())
-
-        prob_indexes = sorted([var.getCol().getLPPos() for var in candidates])
-
-        instance_path = self.instance_path
-        solution_path = None
-        action_history = self.action_history
-
-        if self.local:
-            prob_file = tempfile.NamedTemporaryFile(suffix=".lp", dir="tmp")
-            sol_file = tempfile.NamedTemporaryFile(suffix=".sol", dir="tmp")
-
-            instance_path = prob_file.name
-            solution_path = sol_file.name
-
-            utils.write_to_file(instance_path, solution_path, m)
-            action_history = []
-
-        r = self.rng.integers(0, 2 ** 32)
-        args = list(zip(
-            prob_indexes * self.n_repetitions,
-            repeat(action_history),
-            [r + j for _ in range(n_actions) for j in range(self.n_repetitions)],
-            repeat(instance_path),
-            repeat(self.scip_params),
-            repeat(solution_path),
-            repeat(self.n_repetitions == 1),
-        ))
-
-        if self.pool:
-            res = self.pool.map(self.get_score, args)
-        else:
-            res = [self.get_score(*arg) for arg in args]
-
-        if self.local:
-            prob_file.close()
-            sol_file.close()
-
-        res = np.array(res).reshape(self.n_repetitions, n_actions)
-        scores = res.min(axis=0)
-
-        res = np.zeros(n_vars)
-        res[:] = np.nan
-        res[prob_indexes] = scores
-        return res
-
-    def before_reset(self, model):
-        self.pseudocosts_function.before_reset(model)
-
-    @staticmethod
-    def get_score(action_index, action_history, seed, instance_path, scip_params, solution_path, use_full_strong=False):
-        env = HistoryBranchingEnvironment(
-            observation_function=ecole.observation.StrongBranchingScores() if use_full_strong else None,
-            information_function={
-                "nb_nodes": ecole.reward.NNodes(),
-                "gap": reward.gapReward()
-            },
-            scip_params=scip_params
-        )
-
-        rng = np.random.default_rng(seed)
-
-        history_index = 0
-        env.seed(0)
-
-        nb_nodes, t = 0, 0
-
-        observation, action_set, _, done, info = env.reset(instance_path, solution_path=solution_path)
-        nb_nodes += info["nb_nodes"]
-
-        while not done:
-            if history_index < len(action_history):
-                action = action_history[history_index]
-                # assert action in action_set
-            elif history_index == len(action_history):
-                action = action_index
-                # assert action in action_set
-            elif use_full_strong:
-                action = action_set[observation[action_set].argmax()]
-            else:
-                action = rng.choice(action_set)
-
-            history_index += 1
-
-            # print(action, action_set)
-            observation, action_set, _, done, info = env.step(action)
-            nb_nodes += info["nb_nodes"]
-
-        gap = info["gap"]
-        return (1 + gap) * nb_nodes
-        # return nb_nodes
-
-    def __str__(self):
-        return f"UB({self.n_repetitions}"
 
 
 class GnnObserver(Observer):

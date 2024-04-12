@@ -77,7 +77,11 @@ class GraphDataset(torch_geometric.data.Dataset):
         """
         if self.sample_files is not None:
             with gzip.open(self.sample_files[index], "rb") as f:
-                sample = pickle.load(f)
+                try:
+                    sample = pickle.load(f)
+                except:
+                    print(self.sample_files[index])
+                    raise f"Error with file {self.sample_files[index]}"
         else:
             sample = self.sample[index]
 
