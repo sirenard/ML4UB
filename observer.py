@@ -1,7 +1,9 @@
 import math
 import pickle
 import tempfile
+import time
 from itertools import repeat
+import os
 
 import ecole
 import numpy as np
@@ -29,6 +31,9 @@ class Observer:
         self.action_history = []
         self.instance_path = instance_path
         self.seed = seed
+
+    def done(self, model: pyscipopt.Model):
+        return
 
     def __str__(self):
         return "default"
@@ -74,39 +79,69 @@ class LiftedObserver(Observer):
         self.score_method = score_method
         self.node_limit = node_limit
 
+        self.is_child = False
+        self.writing_pipe = None
+
     def before_reset(self, model):
         self.action_history = []
         self.observer.before_reset(model)
-        LiftedObserver.tmp_observer = self.observer
-        l = lambda: HistoryBranchingEnvironment(
-            observation_function=self.observer,
-            information_function={
-                "nb_nodes": ecole.reward.NNodes(),
-                "gap": reward.gapReward()
-            },
-            scip_params=self.scip_params
-        )
-        self.pool.set_workers_state(l, is_function=True)
 
     def extract(self, model, done):
+        print("Extracting")
+        if self.is_child:
+            print("Child branching...")
+            return self.observer.extract(model, done)
+
         m: pyscipopt.Model = model.as_pyscipopt()
         candidates, *_ = m.getLPBranchCands()
         n_vars = int(m.getNVars())
 
         prob_indexes = sorted([var.getCol().getLPPos() for var in candidates])
 
-        node_limit = m.getNNodes() + self.node_limit
 
-        args = list(zip(
-            prob_indexes,
-            repeat(self.action_history),
-            repeat(self.instance_path),
-            repeat(node_limit)
-        ))
+        pid = 1
+        pipes = [os.pipe() for _ in prob_indexes]
+        pids = []
 
-        res = self.pool.map(self.get_score, args, on_state=True)
+        for i, index in enumerate(prob_indexes[:1]):
+            pid = os.fork()
+            r, w = pipes[i]
+            if pid > 0: #parent
+                pids.append(pid)
+                os.close(w)
+            else: #child
+                os.close(r)
+                self.is_child = True
+                self.writing_pipe = w
+                res = np.zeros(n_vars)
+                res[:] = np.nan
+                res[prob_indexes] = 0
+                res[index] = 1
 
-        scores = np.array(res)
+                print(f"Child on {index}")
+                #time.sleep(20)
+                print("OK")
+
+                node_lim = m.getNNodes() + self.node_limit
+                #m.setParam("limits/nodes", node_lim)
+
+                return res
+
+
+        scores = np.zeros(n_vars)
+        # os.wait()
+        for i in range(n_vars):
+            pid = pids[i]
+            r, _ = pipes[i]
+            os.waitpid(pid,0)
+
+            r = os.fdopen(r, "rb")
+            str = r.read()
+            print(str)
+            score = pickle.loads(str)
+
+            scores[i] = score
+
 
         match self.score_method:
             case "n":
@@ -129,42 +164,21 @@ class LiftedObserver(Observer):
         res[prob_indexes] = scores
         return res
 
-    @staticmethod
-    def get_score(env: ecole.environment.Environment, action_index, action_history, instance_path, node_limit):
-        history_index = 0
-        env.seed(0)
-
-        nb_nodes, t = 0, 0
-
-        env.scip_params["limits/nodes"] = node_limit
-
-        observation, action_set, _, done, info = env.reset(
-            instance_path
-        )
-        nb_nodes += info["nb_nodes"]
-
-        while not done:
-            if history_index < len(action_history):
-                action = action_history[history_index]
-            elif history_index == len(action_history):
-                action = action_index
-            else:
-                action = action_set[observation[action_set].argmax()]
-
-            history_index += 1
-
-            observation, action_set, _, done, info = env.step(action)
-            nb_nodes += info["nb_nodes"]
-
-        gap = info["gap"]
-
-        model: pyscipopt.Model = env.model.as_pyscipopt()
+    def done(self, model: pyscipopt.Model):
+        if not self.is_child:
+            return
 
         if model.getGap() == 0:
-            return model.getNNodes()
+            nnodes = model.getNNodes()
         else:
-            return model.getTreesizeEstimation()
-        # return -(1 + gap) * nb_nodes
+            nnodes = model.getTreesizeEstimation()
+
+        print(nnodes)
+
+        w = os.fdopen (self.writing_pipe, 'wb')
+        w.write(pickle.dumps(nnodes))
+        w.close()
+        os._exit(os.EX_OK)
 
     def __str__(self):
         return f"lifted({str(self.observer)})"

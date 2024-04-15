@@ -80,7 +80,10 @@ class EcoleSolver(Solver):
             action = self.get_action(action_set, observation)
             self.observer.step(action)
             self.before_action(action, action_set, observation)
+            print(f"Action {action}")
+
             observation, action_set, _, done, info = self.env.step(action)
+            print("DOne")
             self.model = self.env.model.as_pyscipopt()
             nb_nodes += info["nb_nodes"]
             if not done:
