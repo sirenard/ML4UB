@@ -7,6 +7,7 @@ import pyomo.environ as pyo
 import pyscipopt
 from pyscipopt import *
 import egret.data.model_data as md
+import tempfile
 
 from egret.data.model_data import ModelData
 
@@ -161,8 +162,11 @@ class UcigGenerator:
         m = ModelData(self.model_data)
 
         pyomo_model = egret.models.unit_commitment.create_CA_unit_commitment_model(m)
-        pyomo_model.write("prob.lp")
-        model_ecole = ecole.scip.Model.from_file("prob.lp")
+        prob_file = tempfile.NamedTemporaryFile(suffix=".lp", dir="tmp")
+
+        pyomo_model.write(prob_file.name)
+        model_ecole = ecole.scip.Model.from_file(prob_file.name)
+        prob_file.close()
         return model_ecole
 
 

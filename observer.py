@@ -121,7 +121,7 @@ class LiftedObserver(Observer):
                 expert_value = scores[expert_action]
                 scores = np.log2((expert_value+1)/(scores+1))
             case _:
-                scores = scores
+                scores = -scores
 
 
         res = np.zeros(n_vars)
