@@ -1,4 +1,5 @@
 import gzip
+import os
 import pickle
 import tempfile
 from pathlib import Path

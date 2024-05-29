@@ -50,5 +50,23 @@ class SimpleConfiguringDynamics(ecole.dynamics.ConfiguringDynamics):
 class SimpleBranching(ecole.environment.Environment):
     __Dynamics__ = SimpleBranchingDynamics
 
+    def reset(self, *dynamics_args, **dynamics_kwargs):
+        res = super().reset(*dynamics_args, **dynamics_kwargs)
+        done = res[3]
+        if done:
+            model = self.model.as_pyscipopt()
+            self.observation_function.finish(model)
+
+        return res
+
+    def step(self, *dynamics_args, **dynamics_kwargs):
+        res = super().step(*dynamics_args, **dynamics_kwargs)
+        done = res[3]
+        if done:
+            model = self.model.as_pyscipopt()
+            self.observation_function.finish(model)
+
+        return res
+
 class SimpleConfiguring(ecole.environment.Configuring):
     __Dynamics__ = SimpleConfiguringDynamics
