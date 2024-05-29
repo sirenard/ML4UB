@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import torch_geometric
 import torch.nn.functional as F
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -308,7 +309,7 @@ def train(sample_folder: str, learning_rate: float, n_epochs: int, output="agent
     train_data = GraphDataset(train_files)
     train_loader = torch_geometric.loader.DataLoader(train_data, batch_size=32, shuffle=True)
     valid_data = GraphDataset(valid_files)
-    valid_loader = torch_geometric.loader.DataLoader(valid_data, batch_size=128, shuffle=False)
+    valid_loader = torch_geometric.loader.DataLoader(valid_data, batch_size=32, shuffle=False)
 
     policy = GNNPolicy().to(DEVICE)
 
@@ -325,14 +326,18 @@ def train(sample_folder: str, learning_rate: float, n_epochs: int, output="agent
     print(action_distribution)
 
     optimizer = torch.optim.Adam(policy.parameters(), lr=learning_rate)
+    scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.2, patience=5, threshold=1e-2)
     for epoch in range(n_epochs):
-        print(f"Epoch {epoch + 1}")
+        lr = optimizer.param_groups[0]['lr']
+        print(f"Epoch {epoch + 1}, lr {lr}")
 
         train_loss, train_acc = process(policy, train_loader, optimizer)
         print(f"Train loss: {train_loss:0.3f}, accuracy {train_acc:0.3f}")
 
         valid_loss, valid_acc = process(policy, valid_loader, None)
         print(f"Valid loss: {valid_loss:0.3f}, accuracy {valid_acc:0.3f}")
+
+        scheduler.step(valid_loss)
 
         torch.save(policy.state_dict(), output)
 

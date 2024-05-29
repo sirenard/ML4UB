@@ -1,3 +1,4 @@
+import os
 import time
 
 import ecole
@@ -63,6 +64,7 @@ class EcoleSolver(Solver):
         self.before_start_callbacks = c
 
     def solve(self, path: str):
+        pid = os.getpid()
         m = pyscipopt.Model()
         m.setParam("display/verblevel", 0)
         m.readProblem(path)
@@ -77,13 +79,19 @@ class EcoleSolver(Solver):
 
         nb_nodes = info["nb_nodes"]
         while not done:
+            # Ugly and bad, but do the work for the moment when dataset generation is used with fork version of LB
+            new_pid = os.getpid()
+            if pid != new_pid:
+                pid = new_pid
+                self.before_action_callbacks = []
+                # self.env.observation_function = self.observer.observers[0]
+
+
             action = self.get_action(action_set, observation)
             self.observer.step(action)
             self.before_action(action, action_set, observation)
-            print(f"Action {action}")
 
             observation, action_set, _, done, info = self.env.step(action)
-            print("DOne")
             self.model = self.env.model.as_pyscipopt()
             nb_nodes += info["nb_nodes"]
             if not done:
@@ -92,6 +100,8 @@ class EcoleSolver(Solver):
         t = time.time() - t
 
         self.model = self.env.model.as_pyscipopt()
+
+        self.observer.done(self.model)
 
         return nb_nodes, t
 
