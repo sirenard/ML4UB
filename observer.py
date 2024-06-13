@@ -1,3 +1,4 @@
+import json
 import math
 import pickle
 import tempfile
@@ -9,6 +10,7 @@ import ecole
 import numpy as np
 import pyscipopt
 import torch
+from ecole.core.observation import NodeBipartite, NodeBipartiteObs
 
 import reward
 import utils
@@ -66,11 +68,172 @@ class RandomObserver(Observer):
     def __str__(self):
         return "random"
 
+class EntropyObserver(Observer):
+    def __init__(self, n_solve=10):
+        super().__init__()
+        self.n_solve = n_solve
+        self.variables_entropy = {}
+        self.variables_distribution = {}
+        self.values = {}
+        self.solutions = []
+
+    @staticmethod
+    def entropy(xs):
+        n = np.sum(xs)
+        if n>0:
+            ps = xs / n
+        else:
+            ps = xs
+        return -np.sum(np.log2(ps, where=(xs != 0)) * ps)
+
+    def get_conditional_entropies(self, variables):
+        res = []
+        for name in variables:
+            lb, ub = variables[name]
+            dist = np.zeros(int(ub-lb)+1)
+            for sol in self.solutions:
+                good = True
+                for v in variables:
+                    if not(sol[v] >= variables[v][0] and variables[v][1] <= ub):
+                        good = False
+                        break
+                if good:
+                    dist[int(sol[name]-lb)] += 1
+
+            res.append(self.entropy(dist))
+
+        return res
+
+
+    def get_entropy(self, model):
+        prob_file = tempfile.NamedTemporaryFile(suffix=".lp", dir="tmp")
+        # m = pyscipopt.Model(sourceModel=model, globalcopy=False)
+        output = utils.OutputControl()
+        output.mute()
+        model.writeProblem(prob_file.name)
+        output.unmute()
+        prob_name = prob_file.name
+
+        vars_dist = {}
+        n_sols = 0
+
+        for var in model.getVars():
+            # var: pyscipopt.scip.Variable
+            if var.vtype() in ['BINARY', 'INTEGER']:
+                name = var.name
+                dists = np.zeros(int(var.getUbGlobal() - var.getLbGlobal() + 1))
+                vars_dist[name] = dists
+
+        m2 = pyscipopt.Model()
+        m2.setParam("display/verblevel", 0)
+
+        self.solutions = []
+        for i in range(self.n_solve):
+            m2.setParam("randomization/lpseed", i)
+            m2.setParam("randomization/randomseedshift", i)
+            m2.setParam("randomization/permutationseed", i)
+            m2.readProblem(prob_name)
+            m2.optimize()
+
+            best_obj = m2.getObjVal()
+            for sol in m2.getSols():
+                # sol: pyscipopt.scip.Solution
+                obj = m2.getSolObjVal(sol)
+                if obj >= 1.5*best_obj:
+                    continue
+
+                n_sols += 1
+                s = str(sol).replace("'","\"")
+                self.solutions.append(json.loads(s))
+                # for var in m2.getVars():
+                #     # var: pyscipopt.scip.Variable
+                #     if var.vtype() in ['BINARY', 'INTEGER']:
+                #         name = var.name
+                #         # s = str(sol)
+                #         # s = s.replace("'", "\"")
+                #         # val = json.loads(s)[name]
+                #
+                #         val = sol[var]
+                #         val = int(round(val))
+                #         lb = var.getLbGlobal()
+                #         name = name.replace("t_", "")
+                #         vars_dist[name][int(val - lb)] += 1
+
+        prob_file.close()
+
+        # print(n_sols)
+        entropy = {}
+        # for name in vars_dist:
+        #     dist = vars_dist[name] #/ n_sols
+        #     self.variables_distribution[name] = dist
+        #     entropy[name] = self.entropy(dist)
+
+        return entropy
+
+    def before_reset(self, model):
+        m: pyscipopt.Model = model.as_pyscipopt()
+        self.variables_entropy = self.get_entropy(m)
+
+    def extract(self, model, done):
+        m: pyscipopt.Model = model.as_pyscipopt()
+        # entropy = self.get_entropy(m)
+        # entropy = self.variables_entropy
+        candidates, *_ = m.getLPBranchCands()
+        n_vars = int(m.getNVars())
+
+        res = np.zeros(n_vars)
+        res[:] = np.nan
+
+        e = 0
+        vars = {}
+        for var in m.getVars():
+            # var: pyscipopt.scip.Variable
+            if var.vtype() in ['BINARY', 'INTEGER']:
+                name = var.name.replace("t_", "")
+                # dist = self.variables_distribution[name]
+                # lb = var.getLbGlobal()
+                # start = int(var.getLbLocal() - lb)
+                # end = int(var.getUbLocal() - lb)
+                # e += self.entropy(dist[start:end + 1])
+                lb = var.getLbLocal()
+                ub = var.getUbLocal()
+                vars[name] = [lb,ub]
+
+
+        for var in candidates:
+            var: pyscipopt.scip.Variable
+            name = var.name
+            name = name.replace("t_", "")
+            prob_index = var.getCol().getLPPos()
+            # dist = self.variables_distribution[name]
+            # lb = var.getLbGlobal()
+            # start = int(var.getLbLocal() - lb)
+            # val = var.getLPSol()
+            # end = int(var.getUbLocal() - lb)
+            # e1 = self.entropy(dist[start:math.floor(val)+1])
+            # e2 = self.entropy(dist[start+math.ceil(val):end+1])
+            #
+            # res[prob_index] = -(e1 + e2 + 2*(e - self.entropy(dist[start:end + 1])))
+            # # res[prob_index] = (e1 + e2)
+
+            lb, ub = vars[name]
+            val = var.getLPSol()
+            vars[name] = [lb, math.floor(val)]
+            e1 = self.get_conditional_entropies(vars)
+            vars[name] = [math.ceil(val), ub]
+            e2 = self.get_conditional_entropies(vars)
+            vars[name] = [lb, ub]
+            res[prob_index] = (np.sum(e1)+np.sum(e2))
+
+        return res
+
+    def __str__(self):
+        return "entropy"
 
 class LiftedObserver(Observer):
     tmp_observer = None
 
-    def __init__(self, observer=ecole.observation.StrongBranchingScores(), scip_params={}, pool: MpiPool = MpiPool(), score_method=None, node_limit=50, local=False):
+    def __init__(self, observer=ecole.observation.StrongBranchingScores(), scip_params={}, pool: MpiPool = MpiPool(), score_method=None, node_limit=50, local=False, n_proc=24):
         super().__init__()
         self.action_history = []
         self.scip_params = scip_params
@@ -82,6 +245,7 @@ class LiftedObserver(Observer):
         self.is_child = False
         self.writing_pipe = None
         self.local=local
+        self.n_proc=n_proc
 
     def before_reset(self, model):
         self.action_history = []
@@ -107,6 +271,10 @@ class LiftedObserver(Observer):
             if pid > 0: #parent
                 pids.append(pid)
                 os.close(w)
+                if len(pids) == self.n_proc:
+                    p = pids[0]
+                    os.waitpid(p, 0)
+                    pids.remove(p)
             else: #child
                 os.close(r)
                 self.is_child = True
@@ -127,16 +295,21 @@ class LiftedObserver(Observer):
 
 
         scores = np.zeros(len(prob_indexes))
-        # os.wait()
+        # print(f"{len(prob_indexes)=} candidates")
+
+        for pid in pids:
+            os.waitpid(pid, 0)
         for i in range(len(prob_indexes)):
-            pid = pids[i]
             r, _ = pipes[i]
-            os.waitpid(pid,0)
 
             # print("Child done")
             r = os.fdopen(r, "rb")
             str = r.read()
-            score = pickle.loads(str)
+            d = pickle.loads(str)
+            score=d["nnodes"]
+
+            if self.score_method == "custom":
+                score = None
 
             # print(f"Score {score}")
 
@@ -145,7 +318,7 @@ class LiftedObserver(Observer):
             r.close()
 
 
-
+        # print(scores)
         match self.score_method:
             case "n":
                 scores = -scores / np.linalg.norm(scores)
@@ -158,6 +331,8 @@ class LiftedObserver(Observer):
                 # expert_action = expert_scores[prob_indexes].argmax()
                 # expert_value = scores[expert_action]
                 scores = np.log2((scores.min()+1)/(scores+1))
+            case "custom":
+                pass
             case _:
                 scores = -scores
 
@@ -182,7 +357,7 @@ class LiftedObserver(Observer):
 
 
         w = os.fdopen (self.writing_pipe, 'wb')
-        w.write(pickle.dumps(nnodes))
+        w.write(pickle.dumps({"nnodes": nnodes, "obj":model.getObjVal()}))
         w.close()
         os._exit(os.EX_OK)
 
@@ -214,13 +389,14 @@ class StrongBranching(Observer):
 
 
 class GnnObserver(Observer):
-    def __init__(self, policy_path: str, feature_observer=ecole.observation.NodeBipartite(), try_use_gpu=False):
+    def __init__(self, policy_path: str, feature_observer=ecole.observation.NodeBipartite(), try_use_gpu=False, **kwargs):
         super().__init__()
         self.policy_path = policy_path
-        self.policy = load_policy(policy_path, try_use_gpu)
+        self.policy = load_policy(policy_path, try_use_gpu, **kwargs)
         self.feature_observer = feature_observer
         self.policy_path = policy_path
         self.try_use_gpu = try_use_gpu
+        self.has_tree_features = "n_tree_features" in kwargs
 
     def before_reset(self, model):
         self.feature_observer.before_reset(model)
@@ -233,6 +409,8 @@ class GnnObserver(Observer):
             torch.from_numpy(observation.edge_features.indices.astype(np.int64)).to(device),
             torch.from_numpy(observation.edge_features.values.astype(np.float32)).view(-1, 1).to(device),
             torch.from_numpy(observation.variable_features.astype(np.float32)).to(device),
+            observation.variable_features.shape[0],
+            torch.from_numpy(observation.tree_features.astype(np.float32)).to(device) if self.has_tree_features else np.array([]),
         )
 
         logits = self.policy(*observation)
@@ -246,6 +424,56 @@ class GnnObserver(Observer):
 
     def __str__(self):
         return f"GNN({self.policy_path})"
+
+class LpObserver(Observer):
+    def extract(self, model, done):
+        m: pyscipopt.Model = model.as_pyscipopt()
+        return m.getLPObjVal()
+
+
+class NodeBipartiteObsExtended:
+    def __init__(self, node, tree_features = np.array([])):
+        self.RowFeatures = node.RowFeatures
+        self.VariableFeatures = node.VariableFeatures
+
+        self.edge_features = node.edge_features
+        self.row_features = node.row_features
+        self.variable_features = node.variable_features
+        self.tree_features = tree_features
+class NodeBipartiteExtended(NodeBipartite):
+    def __init__(self):
+        super().__init__()
+        self.gap = 0
+        self.leaf_frequency = 0
+        self.open_nodes = 0
+        self.ssg = 0
+        self.tree_weight = 0
+
+    def before_reset(self, model):
+        super().before_reset(model)
+
+        self.gap = 0
+        self.leaf_frequency = 0
+        self.open_nodes = 0
+        self.ssg = 0
+        self.tree_weight = 0
+
+    def extract(self, model, done):
+        obs = super().extract(model, done)
+
+        m: pyscipopt.Model = model.as_pyscipopt()
+
+        nnodes = m.getNNodes()
+        self.gap = m.getGap()
+
+
+        self.leaf_frequency = 1/nnodes * (m.getNLeaves() - 1/2)
+
+
+        completion = m.getNNodes() / m.getTreesizeEstimation()
+        tree_features = np.array([completion])
+        return NodeBipartiteObsExtended(obs, tree_features)
+
 
 
 class DistObserver(Observer):
