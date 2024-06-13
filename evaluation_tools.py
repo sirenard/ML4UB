@@ -29,30 +29,32 @@ class Data:
     def sum_over_instances(self):
         return self.data.sum(axis=0)
 
-    def performance_profile(self, metric: str = "nnodes", ratios = np.arange(1, 10.001, .2)):
+    def performance_profile(self, metric: str = "nnodes", ratios = np.arange(0, 1.001, .01)):
         metric_index = self.metrics.index(metric)
         n_instances = self.data.shape[0]
 
         frequency = np.zeros((len(self.solvers), len(ratios)))
 
-        for i in range(n_instances):
-            data = self.data[i,:,metric_index] # values for all the solver for one instance
-            best = np.min(data)
-            for r, ratio in enumerate(ratios):
-                for s in range(len(self.solvers)):
-                    val = data[s]
-                    if val/best <= ratio:
-                        frequency[s, r] += 1
+        data = self.data[:, :, metric_index]
+        min = np.min(data)
+        max = np.max(data)
 
-        frequency /= n_instances
-
+        xs = ratios*(max-min)+min
         for s, solver in enumerate(self.solvers):
-            plt.plot(ratios, frequency[s, :], label=solver)
+            ys = np.zeros(len(ratios))
+            for i in range(n_instances):
+                val = data[i, s]
+                indexes = np.where(val<=xs)
+                ys[indexes] += 1
+
+            ys /= n_instances
+            plt.plot(xs, ys, label=solver)
 
         plt.legend()
         plt.xlabel("factor")
         plt.ylabel("frequency")
         plt.title(f"Performance profile w.r.t. {metric}")
+        plt.xscale("log")
         plt.show()
 
 def evaluate_solvers(solvers: [Solver], instances, n_instances, metrics):
