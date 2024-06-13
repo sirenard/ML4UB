@@ -11,7 +11,7 @@ from solvers import EcoleSolver
 
 
 class DatasetGenerator:
-    def __init__(self, instances, expert_observer=ecole.observation.StrongBranchingScores, exploration_observer=ecole.observation.Pseudocosts(), expert_probability=0.1, state_observer=ecole.observation.NodeBipartite(), seed=None, sample_counter=0, episode_counter=0, **kwargs):
+    def __init__(self, instances, expert_observer=ecole.observation.StrongBranchingScores, exploration_observer=ecole.observation.Pseudocosts(), expert_probability=0.1, state_observer=ecole.observation.NodeBipartite(), seed=None, sample_counter=0, episode_counter=0, score_observer=None, **kwargs):
         self.rng = np.random.default_rng(seed)
         self.expert_observer = expert_observer
 
@@ -26,8 +26,13 @@ class DatasetGenerator:
             )
         ])))
 
+        self.copy_branching_observer = score_observer is None
+        if self.copy_branching_observer:
+            obs = [state_observer]
+        else:
+            obs = [state_observer, score_observer]
 
-        self.solver = EcoleSolver(self.observer, additional_observers=[state_observer], **kwargs)
+        self.solver = EcoleSolver(self.observer, additional_observers=obs, **kwargs)
         self.instances = instances
         self.sample_counter = sample_counter
         self.episode_counter = episode_counter
@@ -41,11 +46,17 @@ class DatasetGenerator:
 
         def before_action(action, action_set, observation):
             scores, node_observation, *_ = observation
+
+            if self.copy_branching_observer:
+                save_scores = scores
+            else:
+                save_scores = observation[2]
+
             scores_are_expert = self.observer.get_last_observer_index_used() == 0
 
             if scores_are_expert and (max_samples<0 or self.sample_counter < max_samples):
                 self.sample_counter += 1
-                data = [node_observation, action, action_set, scores]
+                data = [node_observation, action, action_set, save_scores]
                 filename = f"{folder_name}/sample{sample_prefix}_{self.sample_counter}.pkl"
 
                 with gzip.open(filename, "wb") as f:
@@ -57,17 +68,17 @@ class DatasetGenerator:
 
         count=0
         while ( max_samples<0 or self.sample_counter < max_samples) and (max_instances<0 or count<max_instances):
-            try:
-                instance = next(self.instances)
-                self.episode_counter += 1
-                count += 1
-                m = instance.as_pyscipopt()
-                m.setParam("display/verblevel", 0)
-                m.writeProblem(prob_file.name)
-                self.solver.solve(prob_file.name)
+            # try:
+            instance = next(self.instances)
+            self.episode_counter += 1
+            count += 1
+            m = instance.as_pyscipopt()
+            m.setParam("display/verblevel", 0)
+            m.writeProblem(prob_file.name)
+            self.solver.solve(prob_file.name)
 
-                print(f"Episode {self.episode_counter}, {self.sample_counter} samples collected so far")
-            except:
-                print(f"Crash on episode {self.episode_counter}")
+            print(f"Episode {self.episode_counter}, {self.sample_counter} samples collected so far")
+            # except:
+            #     print(f"Crash on episode {self.episode_counter}")
 
         prob_file.close()
