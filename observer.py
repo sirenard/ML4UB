@@ -2,22 +2,16 @@ import json
 import math
 import pickle
 import tempfile
-import time
-from itertools import repeat
 import os
 
 import ecole
 import numpy as np
 import pyscipopt
 import torch
-from ecole.core.observation import NodeBipartite, NodeBipartiteObs
+from ecole.core.observation import NodeBipartite
 
-import reward
 import utils
-from environments import HistoryBranchingEnvironment
 from model import load_policy, get_device
-from mpi import MpiPool
-from ranking_model import RankSVM
 
 
 class Observer:
@@ -28,6 +22,9 @@ class Observer:
 
     def step(self, action):
         self.action_history.append(action)
+
+    def before_reset(self, model):
+        return
 
     def reset(self, instance_path, seed=None):
         self.action_history = []
@@ -233,11 +230,10 @@ class EntropyObserver(Observer):
 class LiftedObserver(Observer):
     tmp_observer = None
 
-    def __init__(self, observer=ecole.observation.StrongBranchingScores(), scip_params={}, pool: MpiPool = MpiPool(), score_method=None, node_limit=50, local=False, n_proc=24):
+    def __init__(self, observer=ecole.observation.StrongBranchingScores(), scip_params={}, score_method=None, node_limit=50, local=False, n_proc=24):
         super().__init__()
         self.action_history = []
         self.scip_params = scip_params
-        self.pool: MpiPool = pool
         self.observer = observer
         self.score_method = score_method
         self.node_limit = node_limit

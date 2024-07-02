@@ -84,13 +84,15 @@ class GraphDataset(torch_geometric.data.Dataset):
         """
         if self.sample_files is not None:
             with gzip.open(self.sample_files[index], "rb") as f:
-                try:
-                    sample = pickle.load(f)
-                except:
-                    print(self.sample_files[index])
-                    raise f"Error with file {self.sample_files[index]}"
+                #try:
+                # print(self.sample_files[index])
+                sample = pickle.load(f)
+                #except:
+                #    print(self.sample_files[index])
+                #    raise f"Error with file {self.sample_files[index]}"
         else:
             sample = self.sample[index]
+
 
         sample_observation, sample_action, sample_action_set, sample_scores = sample
 
@@ -106,20 +108,33 @@ class GraphDataset(torch_geometric.data.Dataset):
         # We note on which variables we were allowed to branch, the scores as well as the choice
         # taken by strong branching (relative to the candidates)
         candidates = np.array(sample_action_set, dtype=np.int32)
-        candidate_scores = np.array([sample_scores[j] for j in candidates])
-        candidate_choice = np.where(candidates == sample_action)[0][0]
+        if type(sample_scores)!=float:
+            candidate_scores = np.array([sample_scores[j] for j in candidates])
+            candidate_choice = np.where(candidates == sample_action)[0][0]
 
-        graph = BipartiteNodeData(
-            torch.FloatTensor(constraint_features),
-            torch.LongTensor(edge_indices),
-            torch.FloatTensor(edge_features),
-            torch.FloatTensor(variable_features),
-            torch.FloatTensor(tree_features),
-            torch.LongTensor(candidates),
-            len(candidates),
-            torch.LongTensor([candidate_choice]),
-            torch.FloatTensor(candidate_scores)
-        )
+            graph = BipartiteNodeData(
+                torch.FloatTensor(constraint_features),
+                torch.LongTensor(edge_indices),
+                torch.FloatTensor(edge_features),
+                torch.FloatTensor(variable_features),
+                torch.FloatTensor(tree_features),
+                torch.LongTensor(candidates),
+                len(candidates),
+                torch.LongTensor([candidate_choice]),
+                torch.FloatTensor(candidate_scores)
+            )
+        else:
+            graph = BipartiteNodeData(
+                torch.FloatTensor(constraint_features),
+                torch.LongTensor(edge_indices),
+                torch.FloatTensor(edge_features),
+                torch.FloatTensor(variable_features),
+                torch.FloatTensor(tree_features),
+                torch.LongTensor(candidates),
+                len(candidates),
+                torch.LongTensor([]),
+                torch.FloatTensor(np.array([sample_scores]))
+            )
 
         # We must tell pytorch geometric how many nodes there are, for indexing purposes
         graph.num_nodes = constraint_features.shape[0] + variable_features.shape[0]
@@ -250,7 +265,71 @@ class BipartiteGraphConvolution(torch_geometric.nn.MessagePassing):
         )
         return output
 
+class GNNPolicy2(torch.nn.Module):
+    def __init__(self, n_tree_features=0):
+        super().__init__()
+        emb_size = 64
+        cons_nfeats = 5
+        edge_nfeats = 1
+        var_nfeats = 19
 
+        # CONSTRAINT EMBEDDING
+        self.cons_embedding = torch.nn.Sequential(
+            torch.nn.LayerNorm(cons_nfeats),
+            torch.nn.Linear(cons_nfeats, emb_size),
+            torch.nn.ReLU(),
+            torch.nn.Linear(emb_size, emb_size),
+            torch.nn.ReLU(),
+        )
+
+        # EDGE EMBEDDING
+        self.edge_embedding = torch.nn.Sequential(
+            torch.nn.LayerNorm(edge_nfeats),
+        )
+
+        # VARIABLE EMBEDDING
+        self.var_embedding = torch.nn.Sequential(
+            torch.nn.LayerNorm(var_nfeats),
+            torch.nn.Linear(var_nfeats, emb_size),
+            torch.nn.ReLU(),
+            torch.nn.Linear(emb_size, emb_size),
+            torch.nn.ReLU(),
+        )
+
+        self.conv_v_to_c = BipartiteGraphConvolution()
+        self.conv_c_to_v = BipartiteGraphConvolution()
+
+        self.aggregation = torch_geometric.nn.aggr.SoftmaxAggregation(learn=True)
+
+        self.output_module = torch.nn.Sequential(
+            torch.nn.Linear(emb_size+n_tree_features, emb_size+n_tree_features),
+            torch.nn.ReLU(),
+            torch.nn.Linear(emb_size+n_tree_features, 1, bias=False),
+        )
+
+    def forward(
+        self, constraint_features, edge_indices, edge_features, variable_features, n_var, tree_features=np.array([])
+    ):
+        reversed_edge_indices = torch.stack([edge_indices[1], edge_indices[0]], dim=0)
+
+        # First step: linear embedding layers to a common dimension (64)
+        constraint_features = self.cons_embedding(constraint_features)
+        edge_features = self.edge_embedding(edge_features)
+        variable_features = self.var_embedding(variable_features)
+
+        # Two half convolutions
+        constraint_features = self.conv_v_to_c(
+            variable_features, reversed_edge_indices, edge_features, constraint_features
+        )
+        variable_features = self.conv_c_to_v(
+            constraint_features, edge_indices, edge_features, variable_features
+        )
+
+        varaible_index = torch.tensor([0], dtype=torch.int64).to(DEVICE)
+        aggr_features = self.aggregation.forward(variable_features, varaible_index)
+
+        output = self.output_module(aggr_features)
+        return output
 
 def process(policy, data_loader, optimizer=None):
     """
@@ -317,32 +396,34 @@ def pad_tensor(input_, pad_sizes, pad_value=-1e8):
     )
     return output
 
-def train(sample_folder: str, learning_rate: float, n_epochs: int, output="agent.pkl", **kwargs):
+def train(sample_folder: str, learning_rate: float, n_epochs: int, output="agent.pkl", policy=None, dataset=GraphDataset, **kwargs):
 
     sample_files = get_sample_files(sample_folder)
     train_files = sample_files[: int(0.8 * len(sample_files))]
     valid_files = sample_files[int(0.8 * len(sample_files)):]
 
-    train_data = GraphDataset(train_files)
+    train_data = dataset(train_files)
     train_loader = torch_geometric.loader.DataLoader(train_data, batch_size=32, shuffle=True)
-    valid_data = GraphDataset(valid_files)
+    valid_data = dataset(valid_files)
     valid_loader = torch_geometric.loader.DataLoader(valid_data, batch_size=32, shuffle=False)
 
-    policy = GNNPolicy(**kwargs).to(DEVICE)
+    if policy is None:
+        policy = GNNPolicy(**kwargs)
+    policy = policy.to(DEVICE)
 
-    observation = train_data[0].to(DEVICE)
+    # observation = train_data[0].to(DEVICE)
+    #
+    # logits = policy(
+    #     observation.constraint_features,
+    #     observation.edge_index,
+    #     observation.edge_attr,
+    #     observation.variable_features,
+    #     observation.n_nodes,
+    #     observation.tree_features,
+    # )
+    # action_distribution = F.softmax(logits[observation.candidates], dim=-1)
 
-    logits = policy(
-        observation.constraint_features,
-        observation.edge_index,
-        observation.edge_attr,
-        observation.variable_features,
-        observation.n_nodes,
-        observation.tree_features,
-    )
-    action_distribution = F.softmax(logits[observation.candidates], dim=-1)
-
-    print(action_distribution)
+    # print(action_distribution)
 
     optimizer = torch.optim.Adam(policy.parameters(), lr=learning_rate)
     scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.2, patience=5, threshold=1e-2)

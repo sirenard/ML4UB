@@ -1,10 +1,7 @@
 import sys
-from mpi import MpiPool
-from mpi4py import MPI
 import ecole
 
 import pyscipopt
-from pyscipopt.scip import PY_SCIP_PARAMSETTING
 
 
 class OutputControl:
@@ -62,9 +59,3 @@ def write_to_file(model_path, solution_path, model: pyscipopt.Model):
     model.writeBestTransSol(solution_path, write_zeros=True)
     output_control.unmute()
 
-def mpi_start(f, *args, **kwargs):
-    n_mpi = MPI.COMM_WORLD.Get_size()
-    with MpiPool() as pool:
-        if pool is not None:
-            print(f"{n_mpi} workers")
-            f(pool, *args, **kwargs)
