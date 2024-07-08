@@ -41,7 +41,8 @@ class EcoleSolver(Solver):
     def __init__(self, score_observer: Observer, scip_params={}, additional_observers=[], before_start_callbacks=[],
                  before_action_callbacks=[]):
         super().__init__()
-        self.observer = score_observer
+        self.observer_index = 0
+        self.observers = [score_observer, *additional_observers]
         self.env: ecole.environment = HistoryBranchingEnvironment(
             observation_function=(
                 score_observer,
@@ -69,12 +70,14 @@ class EcoleSolver(Solver):
         m.setParam("display/verblevel", 0)
         m.readProblem(path)
         instance: ecole.scip.Model = ecole.scip.Model.from_pyscipopt(m)
-        self.observer.reset(path)
+        for observer in self.observers:
+            if isinstance(observer, Observer):
+                observer.reset(path)
         self.before_start(path)
         self.env.seed(0)
 
         t = time.time()
-        observation, action_set, _, done, info = self.env.reset(instance)
+        observations, action_set, _, done, info = self.env.reset(instance)
         self.model = instance.as_pyscipopt()
 
         nb_nodes = info["nb_nodes"]
@@ -86,12 +89,14 @@ class EcoleSolver(Solver):
                 self.before_action_callbacks = []
                 # self.env.observation_function = self.observer.observers[0]
 
+            for i, observer in enumerate(self.observers):
+                if isinstance(observer, Observer) and observer.is_principal_observer():
+                    self.observer_index = i
 
-            action = self.get_action(action_set, observation)
-            self.observer.step(action)
-            self.before_action(action, action_set, observation)
+            action = self.get_action(action_set, observations)
+            self.before_action(action, action_set, observations)
 
-            observation, action_set, _, done, info = self.env.step(action)
+            observations, action_set, _, done, info = self.env.step(action)
             self.model = self.env.model.as_pyscipopt()
             nb_nodes += info["nb_nodes"]
             if not done:
@@ -101,7 +106,7 @@ class EcoleSolver(Solver):
 
         self.model = self.env.model.as_pyscipopt()
 
-        self.observer.done(self.model)
+        self.observers[self.observer_index].done(self.model)
 
         return nb_nodes, t
 
@@ -115,14 +120,14 @@ class EcoleSolver(Solver):
         return False
 
     def get_action(self, action_set, observation) -> int:
-        scores = observation[0]
+        scores = observation[self.observer_index]
         #action_index = scores[action_set].argmax()
         action_index = np.random.choice(np.flatnonzero(scores[action_set] == scores[action_set].max())) # chose at random an index with max value
         action = action_set[action_index]
         return action
 
     def __str__(self):
-        return str(self.observer)
+        return str(self.observers[0])
 
 
 class ClassicSolver(Solver):

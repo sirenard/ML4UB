@@ -15,24 +15,29 @@ from model import load_policy, get_device
 
 
 class Observer:
-    def __init__(self, seed=None):
+    def __init__(self, seed=None, principal_observer=False):
         self.seed = seed
-        self.action_history = []
         self.instance_path = None
-
-    def step(self, action):
-        self.action_history.append(action)
+        self.principal_observer = principal_observer
 
     def before_reset(self, model):
         return
 
+    def extract(self, model, done):
+        return
+
     def reset(self, instance_path, seed=None):
-        self.action_history = []
         self.instance_path = instance_path
         self.seed = seed
 
-    def done(self, model: pyscipopt.Model):
+    def done(self, model):
         return
+
+    def set_principal_observer(self, val):
+        self.principal_observer = val
+
+    def is_principal_observer(self):
+        return self.principal_observer
 
     def __str__(self):
         return "default"
@@ -65,6 +70,7 @@ class RandomObserver(Observer):
     def __str__(self):
         return "random"
 
+
 class EntropyObserver(Observer):
     def __init__(self, n_solve=10):
         super().__init__()
@@ -77,7 +83,7 @@ class EntropyObserver(Observer):
     @staticmethod
     def entropy(xs):
         n = np.sum(xs)
-        if n>0:
+        if n > 0:
             ps = xs / n
         else:
             ps = xs
@@ -87,20 +93,19 @@ class EntropyObserver(Observer):
         res = []
         for name in variables:
             lb, ub = variables[name]
-            dist = np.zeros(int(ub-lb)+1)
+            dist = np.zeros(int(ub - lb) + 1)
             for sol in self.solutions:
                 good = True
                 for v in variables:
-                    if not(sol[v] >= variables[v][0] and variables[v][1] <= ub):
+                    if not (sol[v] >= variables[v][0] and variables[v][1] <= ub):
                         good = False
                         break
                 if good:
-                    dist[int(sol[name]-lb)] += 1
+                    dist[int(sol[name] - lb)] += 1
 
             res.append(self.entropy(dist))
 
         return res
-
 
     def get_entropy(self, model):
         prob_file = tempfile.NamedTemporaryFile(suffix=".lp", dir="tmp")
@@ -136,11 +141,11 @@ class EntropyObserver(Observer):
             for sol in m2.getSols():
                 # sol: pyscipopt.scip.Solution
                 obj = m2.getSolObjVal(sol)
-                if obj >= 1.5*best_obj:
+                if obj >= 1.5 * best_obj:
                     continue
 
                 n_sols += 1
-                s = str(sol).replace("'","\"")
+                s = str(sol).replace("'", "\"")
                 self.solutions.append(json.loads(s))
                 # for var in m2.getVars():
                 #     # var: pyscipopt.scip.Variable
@@ -181,7 +186,6 @@ class EntropyObserver(Observer):
         res = np.zeros(n_vars)
         res[:] = np.nan
 
-        e = 0
         vars = {}
         for var in m.getVars():
             # var: pyscipopt.scip.Variable
@@ -194,8 +198,7 @@ class EntropyObserver(Observer):
                 # e += self.entropy(dist[start:end + 1])
                 lb = var.getLbLocal()
                 ub = var.getUbLocal()
-                vars[name] = [lb,ub]
-
+                vars[name] = [lb, ub]
 
         for var in candidates:
             var: pyscipopt.scip.Variable
@@ -220,19 +223,20 @@ class EntropyObserver(Observer):
             vars[name] = [math.ceil(val), ub]
             e2 = self.get_conditional_entropies(vars)
             vars[name] = [lb, ub]
-            res[prob_index] = (np.sum(e1)+np.sum(e2))
+            res[prob_index] = (np.sum(e1) + np.sum(e2))
 
         return res
 
     def __str__(self):
         return "entropy"
 
+
 class LiftedObserver(Observer):
     tmp_observer = None
 
-    def __init__(self, observer=ecole.observation.StrongBranchingScores(), scip_params={}, score_method=None, node_limit=50, local=False, n_proc=24):
+    def __init__(self, observer=ecole.observation.StrongBranchingScores(), scip_params={}, score_method=None,
+                 node_limit=50, local=False, n_proc=24):
         super().__init__()
-        self.action_history = []
         self.scip_params = scip_params
         self.observer = observer
         self.score_method = score_method
@@ -240,11 +244,10 @@ class LiftedObserver(Observer):
 
         self.is_child = False
         self.writing_pipe = None
-        self.local=local
-        self.n_proc=n_proc
+        self.local = local
+        self.n_proc = n_proc
 
     def before_reset(self, model):
-        self.action_history = []
         self.observer.before_reset(model)
 
     def extract(self, model, done):
@@ -257,24 +260,26 @@ class LiftedObserver(Observer):
 
         prob_indexes = sorted([var.getCol().getLPPos() for var in candidates])
 
-
         pipes = [os.pipe() for _ in prob_indexes]
         pids = []
+
+        # print(f"{len(candidates)} candidates")
 
         for i, index in enumerate(prob_indexes):
             pid = os.fork()
             r, w = pipes[i]
-            if pid > 0: #parent
+            if pid > 0:  #parent
                 pids.append(pid)
                 os.close(w)
                 if len(pids) == self.n_proc:
                     p = pids[0]
                     os.waitpid(p, 0)
                     pids.remove(p)
-            else: #child
+            else:  #child
                 os.close(r)
                 self.is_child = True
                 self.writing_pipe = w
+                self.set_principal_observer(True)
                 if self.local:
                     leaves, _, _ = m.getOpenNodes()
                     for node in leaves:
@@ -289,7 +294,6 @@ class LiftedObserver(Observer):
 
                 return res
 
-
         scores = np.zeros(len(prob_indexes))
         # print(f"{len(prob_indexes)=} candidates")
 
@@ -302,7 +306,7 @@ class LiftedObserver(Observer):
             r = os.fdopen(r, "rb")
             str = r.read()
             d = pickle.loads(str)
-            score=d["nnodes"]
+            score = d["nnodes"]
 
             if self.score_method == "custom":
                 score = None
@@ -312,7 +316,6 @@ class LiftedObserver(Observer):
             scores[i] = score
 
             r.close()
-
 
         # print(scores)
         match self.score_method:
@@ -326,34 +329,29 @@ class LiftedObserver(Observer):
                 # expert_scores = self.observer.extract(model, done)
                 # expert_action = expert_scores[prob_indexes].argmax()
                 # expert_value = scores[expert_action]
-                scores = np.log2((scores.min()+1)/(scores+1))
+                scores = np.log2((scores.min() + 1) / (scores + 1))
             case "custom":
                 pass
             case _:
                 scores = -scores
-
-
 
         res = np.zeros(n_vars)
         res[:] = np.nan
         res[prob_indexes] = scores
         return res
 
-    def done(self, model: pyscipopt.Model):
+    def done(self, model):
         if not self.is_child:
             return
-
 
         if model.getGap() == 0:
             nnodes = model.getNNodes()
         else:
             nnodes = model.getTreesizeEstimation()
 
-        # print(f"End child {nnodes}")
 
-
-        w = os.fdopen (self.writing_pipe, 'wb')
-        w.write(pickle.dumps({"nnodes": nnodes, "obj":model.getObjVal()}))
+        w = os.fdopen(self.writing_pipe, 'wb')
+        w.write(pickle.dumps({"nnodes": nnodes, "obj": model.getObjVal()}))
         w.close()
         os._exit(os.EX_OK)
 
@@ -382,10 +380,9 @@ class StrongBranching(Observer):
         return "SB"
 
 
-
-
 class GnnObserver(Observer):
-    def __init__(self, policy_path: str, feature_observer=ecole.observation.NodeBipartite(), try_use_gpu=False, **kwargs):
+    def __init__(self, policy_path: str, feature_observer=ecole.observation.NodeBipartite(), try_use_gpu=False,
+                 **kwargs):
         super().__init__()
         self.policy_path = policy_path
         self.policy = load_policy(policy_path, try_use_gpu, **kwargs)
@@ -398,15 +395,17 @@ class GnnObserver(Observer):
         self.feature_observer.before_reset(model)
 
     def extract(self, model, done):
+        # print(f"{os.getpid()}: Extract")
         device = get_device(self.try_use_gpu)
         observation = self.feature_observer.extract(model, done)
-        observation = (
+        observation= (
             torch.from_numpy(observation.row_features.astype(np.float32)).to(device),
             torch.from_numpy(observation.edge_features.indices.astype(np.int64)).to(device),
             torch.from_numpy(observation.edge_features.values.astype(np.float32)).view(-1, 1).to(device),
             torch.from_numpy(observation.variable_features.astype(np.float32)).to(device),
             observation.variable_features.shape[0],
-            torch.from_numpy(observation.tree_features.astype(np.float32)).to(device) if self.has_tree_features else np.array([]),
+            torch.from_numpy(observation.tree_features.astype(np.float32)).to(
+                device) if self.has_tree_features else np.array([]),
         )
 
         logits = self.policy(*observation)
@@ -421,6 +420,7 @@ class GnnObserver(Observer):
     def __str__(self):
         return f"GNN({self.policy_path})"
 
+
 class LpObserver(Observer):
     def extract(self, model, done):
         m: pyscipopt.Model = model.as_pyscipopt()
@@ -428,7 +428,7 @@ class LpObserver(Observer):
 
 
 class NodeBipartiteObsExtended:
-    def __init__(self, node, tree_features = np.array([])):
+    def __init__(self, node, tree_features=np.array([])):
         self.RowFeatures = node.RowFeatures
         self.VariableFeatures = node.VariableFeatures
 
@@ -436,6 +436,8 @@ class NodeBipartiteObsExtended:
         self.row_features = node.row_features
         self.variable_features = node.variable_features
         self.tree_features = tree_features
+
+
 class NodeBipartiteExtended(NodeBipartite):
     def __init__(self):
         super().__init__()
@@ -462,14 +464,11 @@ class NodeBipartiteExtended(NodeBipartite):
         nnodes = m.getNNodes()
         self.gap = m.getGap()
 
-
-        self.leaf_frequency = 1/nnodes * (m.getNLeaves() - 1/2)
-
+        self.leaf_frequency = 1 / nnodes * (m.getNLeaves() - 1 / 2)
 
         completion = m.getNNodes() / m.getTreesizeEstimation()
         tree_features = np.array([completion])
         return NodeBipartiteObsExtended(obs, tree_features)
-
 
 
 class DistObserver(Observer):
@@ -598,8 +597,9 @@ class DistObserver(Observer):
     def __str__(self):
         return "dist"
 
+
 class SVMObserver(Observer):
-    def __init__(self, rank_svm_path, feature_observer = ecole.observation.Khalil2016()):
+    def __init__(self, rank_svm_path, feature_observer=ecole.observation.Khalil2016()):
         super().__init__()
         with open(rank_svm_path, "rb") as f:
             self.model = pickle.load(f)
@@ -620,7 +620,7 @@ class SVMObserver(Observer):
         indexes = self.model.predict(X)
         scores = [0 for _ in candidates]
         for i, j in enumerate(indexes):
-            scores[j] = len(indexes)-i
+            scores[j] = len(indexes) - i
 
         res = np.zeros(n_vars)
         res[:] = np.nan
@@ -630,7 +630,7 @@ class SVMObserver(Observer):
 
 
 class LinearObserver(Observer):
-    def __init__(self, model_path, feature_observer = ecole.observation.Khalil2016()):
+    def __init__(self, model_path, feature_observer=ecole.observation.Khalil2016()):
         super().__init__()
         with open(model_path, "rb") as f:
             self.model = pickle.load(f)
@@ -657,6 +657,59 @@ class LinearObserver(Observer):
         return res
 
 
+class AccuracyObserver(Observer):
+    """
+    Given 2 observers, this observer extracts the placement of the second observer choice in the scoring of the first one
+    It stores all its observations
+    """
+    def __init__(self, oracle: Observer, model_observer: Observer):
+        super().__init__()
+        self.oracle: Observer = oracle
+        self.model_observer: Observer = model_observer
+        self.observations = []
+
+    def before_reset(self, model):
+        self.oracle.before_reset(model)
+        self.model_observer.before_reset(model)
+
+    def extract(self, model, done):
+        m: pyscipopt.Model = model.as_pyscipopt()
+        candidates, *_ = m.getLPBranchCands()
+        prob_indexes = [var.getCol().getLPPos() for var in candidates]
+
+        oracle_scores = self.oracle.extract(model, done)
+
+        if self.oracle.is_principal_observer():
+            self.set_principal_observer(True)
+            return oracle_scores
+
+        oracle_scores = oracle_scores[prob_indexes]
+
+        model_scores = self.model_observer.extract(model, done)
+        model_scores = model_scores[prob_indexes]
+
+        best_index = np.argmax(oracle_scores)
+        model_sorted_indexes = np.argsort(-model_scores)
+
+        position = np.where(model_sorted_indexes == best_index)[0][0] + 1
+        self.observations.append(position)
+        return position
+
+    def get_observations(self):
+        return np.array(self.observations)
+
+    def done(self, model):
+        self.oracle.done(model)
+        self.model_observer.done(model)
+
+    def reset(self, instance_path, seed=None):
+        super().reset(instance_path, seed)
+        self.oracle.reset(instance_path, seed)
+        self.model_observer.reset(instance_path, seed)
+
+    def __str__(self):
+        return f"Acc {str(self.model_observer)}"
+
 class ConditionalObservers(Observer):
     def __init__(self, observers, conditions):
         super().__init__()
@@ -679,11 +732,6 @@ class ConditionalObservers(Observer):
                 else:
                     return observer.extract(model, done)
 
-    def step(self, action):
-        super().step(action)
-        for observer in self.observers:
-            if isinstance(observer, Observer):
-                observer.step(action)
 
     def reset(self, instance_path, seed=None):
         super().reset(instance_path, seed)
@@ -702,4 +750,3 @@ class ConditionalObservers(Observer):
     def __str__(self):
         s = ", ".join([str(observer) for observer in self.observers])
         return f"Cond({s})"
-
