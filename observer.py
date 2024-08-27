@@ -688,10 +688,10 @@ class AccuracyObserver(Observer):
         model_scores = self.model_observer.extract(model, done)
         model_scores = model_scores[prob_indexes]
 
-        best_index = np.argmax(oracle_scores)
-        model_sorted_indexes = np.argsort(-model_scores)
+        best_index = np.argmax(model)
+        oracle_sorted_indexes = np.argsort(-oracle_scores)
 
-        position = np.where(model_sorted_indexes == best_index)[0][0] + 1
+        position = np.where(oracle_sorted_indexes == best_index)[0][0] + 1
         self.observations.append(position)
         return position
 

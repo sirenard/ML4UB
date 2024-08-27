@@ -32,7 +32,7 @@ if __name__ == '__main__':
 
     print(scip_params)
 
-    torch.set_num_threads(1)
+    #torch.set_num_threads(1)
 
     solvers = []
 

@@ -14,7 +14,7 @@ if __name__ == '__main__':
     parser.add_argument("--start_at", type=int, default=0)
     args = parser.parse_args()
 
-    instances = UcigGenerator("uc_hetrogeneous_5_1", start_at_instance=args.start_at+1)
+    instances = UcigGenerator("instances", start_at_instance=args.start_at+1)
 
     expert_probability = 0.6
 
@@ -28,15 +28,16 @@ if __name__ == '__main__':
 
     generator = DatasetGenerator(
         instances,
-        # expert_observer=LiftedObserver(observer=StrongBranching(), scip_params=scip_params, pool=pool, score_method="speedup", node_limit=500),
+        #expert_observer=LiftedObserver(observer=StrongBranching(), scip_params=scip_params, pool=pool, score_method="speedup", node_limit=500),
         expert_observer=LiftedObserver(observer=GnnObserver("uc_5_1_ub_2_0.6_local.pkl", try_use_gpu=False),
                                        scip_params=scip_params, score_method="speedup", node_limit=100,
-                                       local=True),
-        # expert_observer=StrongBranching(),
+                                       local=True, n_proc=24),
+        #expert_observer=StrongBranching(),
         exploration_observer=ecole.observation.Pseudocosts(),
         expert_probability=expert_probability,
         scip_params=scip_params,
         )
-    generator.generate(f"uc_5_1_ub_3_{expert_probability}", max_instances=125, sample_prefix=args.sample_prefix)
+    generator.generate(f"uc_5_1_ub_3_{expert_probability}_local", max_instances=125, sample_prefix=args.sample_prefix)
     # generator.generate(f"uc_", max_instances=200, sample_prefix=args.sample_prefix)
+
 

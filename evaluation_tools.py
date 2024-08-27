@@ -6,7 +6,9 @@ import numpy as np
 
 import utils
 from solvers import Solver
+import matplotlib
 import matplotlib.pyplot as plt
+
 
 class Data:
     def __init__(self, raw_data: np.array, solvers: [str], metrics: [str]):
@@ -20,16 +22,26 @@ class Data:
         index = self.metrics.index(metric)
         d=self.data[:,:,index] # keep only the compared metrix
 
-        indexes = np.where(np.apply_along_axis(condition, 1, d))[0]
+        indexes = np.where(np.prod(np.apply_along_axis(condition, 1, d), axis=1))[0]
 
         positives = self.data[indexes,]
         negatives = np.delete(self.data, indexes, axis=0)
         return Data(positives, self.solvers, self.metrics), Data(negatives, self.solvers, self.metrics)
 
+    def remove_solver(self, solver: str):
+        index = self.solvers.index(solver)
+        self.data = np.delete(self.data, index, axis=1)
+        self.solvers.remove(solver)
+
     def sum_over_instances(self):
         return self.data.sum(axis=0)
 
-    def performance_profile(self, metric: str = "nnodes", ratios = np.arange(0, 1.001, .01)):
+    def performance_profile(self, metric: str = "nnodes", ratios = np.arange(0, 1.00, .01), filename=None):
+
+        if filename:
+            backend = matplotlib.get_backend()
+            matplotlib.use('pgf')
+
         metric_index = self.metrics.index(metric)
         n_instances = self.data.shape[0]
 
@@ -40,6 +52,8 @@ class Data:
         max = np.max(data)
 
         xs = ratios*(max-min)+min
+
+        res = []
         for s, solver in enumerate(self.solvers):
             ys = np.zeros(len(ratios))
             for i in range(n_instances):
@@ -48,14 +62,32 @@ class Data:
                 ys[indexes] += 1
 
             ys /= n_instances
-            plt.plot(xs, ys, label=solver)
+            label = solver
+            if label == "relpscost":
+                label = "RPB"
+            elif "GNN" in label and "sb" in label:
+                label = "$LSB$"
+            elif "GNN" in label and "ub" in label:
+                x = label.split("_")[4]
+                label = f"$LLB^{x}$"
+            plt.plot(xs, ys, label=label)
+            res.append(np.sum(ys*(xs[1]-xs[0]))/max)
 
         plt.legend()
-        plt.xlabel("factor")
+        plt.xlabel(metric)
         plt.ylabel("frequency")
         plt.title(f"Performance profile w.r.t. {metric}")
+        #plt.yscale("log")
         plt.xscale("log")
-        plt.show()
+
+        if filename:
+            plt.savefig(filename)
+            matplotlib.use(backend)
+
+        else:
+            plt.show()
+
+        return res
 
 def evaluate_solvers(solvers: [Solver], instances, n_instances, metrics):
     print(f"{'Instance':<15}" + "".join([f"{str(solver):<{15*len(metrics)}}" for solver in solvers]))
@@ -94,7 +126,7 @@ def evaluate_solvers(solvers: [Solver], instances, n_instances, metrics):
 
     print("="*(15*(len(solvers)*len(metrics)+1)))
 
-    for d, name in zip(res.split_instances_over("gap", lambda xs: xs.sum()==0), ["gap=0", "gap>0"]):
+    for d, name in zip(res.split_instances_over("gap", lambda g: g==0), ["gap=0", "gap>0"]):
         sum = d.sum_over_instances()
         print(f"{'sum ' + name:<15}"+"".join([f"{sum[j,k]:<15.3f}" for j in range(len(solvers)) for k in range(len(metrics))]))
 
