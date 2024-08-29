@@ -13,7 +13,6 @@ import utils
 from environments import HistoryBranchingEnvironment
 from model import load_policy, get_device
 from mpi import MpiPool
-from ranking_model import RankSVM
 
 
 class Observer:

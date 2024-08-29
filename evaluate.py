@@ -1,6 +1,7 @@
 import pickle
 
 import ecole.instance
+import pyscipopt
 
 import linear_model
 from evaluation_tools import evaluate_solvers
@@ -34,10 +35,10 @@ def main(pool = None):
     #rank_model = ranking_model.train("test", "test.pkl")
     #model = linear_model.train("test", "test.pkl")
 
-    with open("test.pkl", "rb") as f:
-        model = pickle.load(f)
 
     def estimator(m: pyscipopt.scip.Model):
+        with open("test.pkl", "rb") as f:
+            model = pickle.load(f)
         lp_obj = m.getLPObjVal()
 
         features = []
@@ -49,6 +50,12 @@ def main(pool = None):
             alpha=0
 
         return (1+alpha)*lp_obj
+
+    def estimator2(m: pyscipopt.scip.Model):
+        m2 = pyscipopt.scip.Model(sourceModel=m)
+        m2.setParam("display/verblevel", 0)
+        m2.optimize()
+        return m2.getObjVal()
 
 
 

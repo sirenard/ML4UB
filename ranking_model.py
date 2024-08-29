@@ -6,7 +6,6 @@ import numpy as np
 
 from sklearn import svm, linear_model
 from sklearn.model_selection import KFold
-from lightgbm import LGBMRanker
 
 from model import get_sample_files
 
