@@ -7,6 +7,7 @@ import pyomo.environ as pyo
 import pyscipopt
 from pyscipopt import *
 import egret.data.model_data as md
+import tempfile
 
 from egret.data.model_data import ModelData
 
@@ -23,57 +24,75 @@ class UcigGenerator:
         :param file_path:
         :param horizon:
         """
+        self.file = open(file_path, "r")
+        self.lines = iter(self.file.readlines())
+        self.model_data = None
+        self.days = days
+        self.loads = []
+        self.count=0
+
+        for _ in range(start_at_instance):
+            self.generateNext()
+
+    def __del__(self):
+        self.file.close()
+
+
+
+    def get_next_modeldata(self):
         data = {}
-        with open(file_path, "r") as f:
-            lines = iter(f.readlines())
 
-            single_values = [
-                "ProblemNum",
-                "HorizonLen",
-                "NumThermal",
-                "NumHydro",
-                "NumCascade",
-                "LoadCurve",
-                "MinSystemCapacity",
-                "MaxSystemCapacity",
-                "MaxThermalCapacity",
-            ]
-            for line in lines:
-                line = line.strip().split()
-                key = line[0]
+        single_values = [
+            "ProblemNum",
+            "HorizonLen",
+            "NumThermal",
+            "NumHydro",
+            "NumCascade",
+            "LoadCurve",
+            "MinSystemCapacity",
+            "MaxSystemCapacity",
+            "MaxThermalCapacity",
+        ]
+        while True:
+            line = next(self.lines)
+            line = line.strip().split()
+            key = line[0]
 
-                if key in single_values and len(line)>1:
-                    data[key] = float(line[1])
+            if key == "HydroCascadeSection":
+                break
 
-                elif key == "Loads":
-                    loads = []
-                    n_days = int(line[1])
-                    n_splits = int(line[2])
-                    for i in range(n_days):
-                        values = list(map(float, next(lines).strip().split()))
-                        loads.append(values)
-                    data[key] = loads
+            if key in single_values and len(line)>1:
+                data[key] = float(line[1])
 
-                elif key == "SpinningReserve":
-                    values = list(map(float, next(lines).strip().split()))
-                    data[key] = values
+            elif key == "Loads":
+                loads = []
+                n_days = int(line[1])
+                n_splits = int(line[2])
+                for i in range(n_days):
+                    values = list(map(float, next(self.lines).strip().split()))
+                    loads.append(values)
+                data[key] = loads
 
-                elif key == "ThermalSection":
-                    thermal_units = []
-                    for i in range(int(data["NumThermal"])):
-                        values = list(map(float, next(lines).strip().split()))
-                        thermal_units.append(values)
+            elif key == "SpinningReserve":
+                values = list(map(float, next(self.lines).strip().split()))
+                data[key] = values
 
-                    data[key] = thermal_units
+            elif key == "ThermalSection":
+                thermal_units = []
+                for i in range(int(data["NumThermal"])):
+                    values = list(map(float, next(self.lines).strip().split()))
+                    thermal_units.append(values)
+
+                data[key] = thermal_units
 
         model_data = md.ModelData.empty_model_data_dict()
         system = model_data["system"]
         elements = model_data["elements"]
 
-        time_periods = list(range(n_splits*days))
+        time_periods = list(range(n_splits*self.days))
 
         #system["reserve_requirement"] = {"data_type": "time_series", "values": dict(zip(range(1,1+len(data["SpinningReserve"])),data["SpinningReserve"]))}
-        system["reserve_requirement"] = {"data_type": "time_series", "values": data["SpinningReserve"]*days}
+        system["reserve_requirement"] = {"data_type": "time_series", "values": data["SpinningReserve"]*self.days}
         system["time_keys"] = time_periods
         system["baseMVA"] = 1.
         system["time_period_length_minutes"] = 60
@@ -120,33 +139,34 @@ class UcigGenerator:
 
         self.model_data = model_data
         self.loads = data["Loads"]
-        self.days = days
-        self.count = start_at_instance
+
 
     def __iter__(self):
         return self
 
-    def __next__(self):
-        if self.count > len(self.loads):
-            raise StopIteration
+    def generateNext(self):
+        if self.count >= len(self.loads)*self.days:
+            self.get_next_modeldata()
+            self.count = 0
 
         load = []
         for d in range(self.days):
             load += self.loads[self.count+d]
 
-        #load_dic: dict = self.model_data["elements"]["load"]["demand"]["p_load"]["values"]
-        #load_dic.clear()
-        #for i,val in enumerate(load):
-        #    load_dic[i+1]=val
-
         self.model_data["elements"]["load"]["demand"]["p_load"]["values"] = load
-
-        m = ModelData(self.model_data)
         self.count += self.days
 
+
+    def __next__(self):
+        self.generateNext()
+        m = ModelData(self.model_data)
+
         pyomo_model = egret.models.unit_commitment.create_CA_unit_commitment_model(m)
-        pyomo_model.write("prob.lp")
-        model_ecole = ecole.scip.Model.from_file("prob.lp")
+        prob_file = tempfile.NamedTemporaryFile(suffix=".lp", dir="tmp")
+
+        pyomo_model.write(prob_file.name)
+        model_ecole = ecole.scip.Model.from_file(prob_file.name)
+        prob_file.close()
         return model_ecole
 
 
