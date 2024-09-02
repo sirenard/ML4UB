@@ -149,6 +149,7 @@ class GNNPolicy(torch.nn.Module):
         cons_nfeats = 5
         edge_nfeats = 1
         var_nfeats = 19
+        self.n_tree_features = n_tree_features
 
         # CONSTRAINT EMBEDDING
         self.cons_embedding = torch.nn.Sequential(
@@ -200,10 +201,13 @@ class GNNPolicy(torch.nn.Module):
             constraint_features, edge_indices, edge_features, variable_features
         )
 
+
         # A final MLP on the variable features
         x = variable_features
-        if len(tree_features) != 0:
-            col = torch.repeat_interleave(tree_features, n_var)
+        if self.n_tree_features != 0:
+            n_row = int(tree_features.size()[0]/self.n_tree_features)
+            tree_features = tree_features.reshape(n_row, self.n_tree_features)
+            col = torch.repeat_interleave(tree_features, n_var, dim=0)
             x = torch.column_stack((x, col))
         output = self.output_module(x).squeeze(-1)
         return output

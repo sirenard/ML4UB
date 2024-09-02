@@ -9,6 +9,7 @@ import numpy as np
 import pyscipopt
 import torch
 from ecole.core.observation import NodeBipartite
+from sympy.integrals.manualintegrate import trig_rewriter
 
 import utils
 from model import load_policy, get_device
@@ -462,12 +463,24 @@ class NodeBipartiteExtended(NodeBipartite):
         m: pyscipopt.Model = model.as_pyscipopt()
 
         nnodes = m.getNNodes()
-        self.gap = m.getGap()
+        gap = m.getGap()
+        # ssg ?
 
-        self.leaf_frequency = 1 / nnodes * (m.getNLeaves() - 1 / 2)
+        tree_weight = 0
+        # for all leaf
+        for n in m.getOpenNodes()[0]:
+            d = n.getDepth()
+            tree_weight += 2**(-d)
 
+        leaf_frequency = 1/2 - m.getNLeaves()/(2*nnodes)
         completion = m.getNNodes() / m.getTreesizeEstimation()
-        tree_features = np.array([completion])
+        if completion < 0:
+            completion = 0
+
+
+        open_nodes = 1/(1+sum([len(l) for l in m.getOpenNodes()]))
+        tree_features = np.array([gap, tree_weight, leaf_frequency, open_nodes, completion])
+        #print(tree_features)
         return NodeBipartiteObsExtended(obs, tree_features)
 
 

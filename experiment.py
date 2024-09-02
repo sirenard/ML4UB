@@ -15,7 +15,8 @@ def sgmean(xs: np.array, s: float) -> float:
 
 
 if __name__ == '__main__':
-    data: Data = pickle.load(open("results/gpu/dataHard.pkl", "rb"))
+    #data: Data = pickle.load(open("results/gpu/dataHard.pkl", "rb"))
+    data: Data = pickle.load(open("data", "rb"))
     #data.remove_solver("GNN(uc_5_1_ub_1_0.6_local.pkl)")
     #data.remove_solver("GNN(uc_5_1_ub_2_0.6_local.pkl)")
     #data.remove_solver("GNN(uc_5_1_ub_4_0.6_local.pkl)")
@@ -63,11 +64,11 @@ if __name__ == '__main__':
     res = data.performance_profile("nnodes")
     print(res)
 
-    sb = data.data[:,data.solvers.index("SB"),data.metrics.index("nnodes")]
-    rb = data.data[:,data.solvers.index("relpscost"),data.metrics.index("nnodes")]
-    lsb = data.data[:,data.solvers.index("GNN(uc_5_1_sb_0.6.pkl)"),data.metrics.index("nnodes")]
-    llb = data.data[:,data.solvers.index("GNN(uc_5_1_ub_3_0.6_local.pkl)"),data.metrics.index("nnodes")]
-    print(ttest_ind(rb, llb))
-    print(ttest_ind(rb, lsb))
-    print(ttest_ind(llb, lsb))
+    # sb = data.data[:,data.solvers.index("SB"),data.metrics.index("nnodes")]
+    # rb = data.data[:,data.solvers.index("relpscost"),data.metrics.index("nnodes")]
+    # lsb = data.data[:,data.solvers.index("GNN(uc_5_1_sb_0.6.pkl)"),data.metrics.index("nnodes")]
+    # llb = data.data[:,data.solvers.index("GNN(uc_5_1_ub_3_0.6_local.pkl)"),data.metrics.index("nnodes")]
+    # print(ttest_ind(rb, llb))
+    # print(ttest_ind(rb, lsb))
+    # print(ttest_ind(llb, lsb))
 

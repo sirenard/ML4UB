@@ -28,7 +28,7 @@ if __name__ == '__main__':
     # instances = ecole.instance.IndependentSetGenerator()
     # instances.seed(666)
 
-    n_instances = 10
+    n_instances = 20
 
     scip_params = {
         "estimation/method": "c",
@@ -37,7 +37,8 @@ if __name__ == '__main__':
         "limits/time": 300,
     }
 
-    policy = train("uc_5_1_ub_3_0.6_global", 0.005, 30, "uc_5_1_ub_3_0.6_global.pkl")
+    # policy = train("sb_normal_0.6", 0.005, 30, "sb_normal_0.6.pkl")
+    # policy = train("sb_extended_0.6", 0.005, 17, "sb_extended_0.6.pkl", n_tree_features=5)
     # policy = train("ca_ub_0_1", 0.005, 20, "ca_ub_0_1.pkl")
     # policy = train("sc_500_1000_ub_0_1_local", 0.005, 30, "sc_500_1000_ub_0_1_local.pkl")
 
@@ -50,24 +51,26 @@ if __name__ == '__main__':
         # EcoleSolver(StrongBranching(), scip_params),
         ClassicSolver("relpscost", scip_params),
 
-        # EcoleSolver(GnnObserver("uc_hetrogeneous_5_1_ub_1_0.6_local.pkl", try_use_gpu=True), scip_params),
+        EcoleSolver(GnnObserver("sb_normal_0.6.pkl", try_use_gpu=True), scip_params),
+        EcoleSolver(GnnObserver("sb_extended_0.6.pkl", try_use_gpu=True, feature_observer=NodeBipartiteExtended(),
+                                n_tree_features=5), scip_params),
+
         # EcoleSolver(GnnObserver("uc_hetrogeneous_5_1_ub_2_0.6_local.pkl", try_use_gpu=True), scip_params),
 
-        EcoleSolver(GnnObserver("uc_5_1_sb_0.6.pkl", try_use_gpu=True), scip_params),
+        # EcoleSolver(GnnObserver("uc_5_1_sb_0.6.pkl", try_use_gpu=True), scip_params),
         # EcoleSolver(GnnObserver("uc_5_1_ub_2_1_local.pkl", try_use_gpu=True), scip_params),
         # EcoleSolver(GnnObserver("uc_5_1_ub_1_0.6_global.pkl", try_use_gpu=True), scip_params),
         # EcoleSolver(GnnObserver("uc_5_1_ub_1_0.6_local.pkl", try_use_gpu=True), scip_params),
         # EcoleSolver(GnnObserver("uc_5_1_ub_2_0.6_local.pkl", try_use_gpu=True), scip_params),
-        EcoleSolver(GnnObserver("uc_5_1_ub_1_0.6_local.pkl", try_use_gpu=True), scip_params),
-        EcoleSolver(GnnObserver("uc_5_1_ub_2_0.6_local.pkl", try_use_gpu=True), scip_params),
-        EcoleSolver(GnnObserver("uc_5_1_ub_3_0.6_local.pkl", try_use_gpu=True), scip_params),
-        EcoleSolver(GnnObserver("uc_5_1_ub_1_0.6_global.pkl", try_use_gpu=True), scip_params),
-        EcoleSolver(GnnObserver("uc_5_1_ub_2_0.6_global.pkl", try_use_gpu=True), scip_params),
-        EcoleSolver(GnnObserver("uc_5_1_ub_3_0.6_global.pkl", try_use_gpu=True), scip_params),
+        # EcoleSolver(GnnObserver("uc_5_1_ub_1_0.6_local.pkl", try_use_gpu=True), scip_params),
+        # EcoleSolver(GnnObserver("uc_5_1_ub_2_0.6_local.pkl", try_use_gpu=True), scip_params),
+        # EcoleSolver(GnnObserver("uc_5_1_ub_3_0.6_local.pkl", try_use_gpu=True), scip_params),
+        # EcoleSolver(GnnObserver("uc_5_1_ub_1_0.6_global.pkl", try_use_gpu=True), scip_params),
+        # EcoleSolver(GnnObserver("uc_5_1_ub_2_0.6_global.pkl", try_use_gpu=True), scip_params),
+        # EcoleSolver(GnnObserver("uc_5_1_ub_3_0.6_global.pkl", try_use_gpu=True), scip_params),
 
         # EcoleSolver(GnnObserver("uc_5_1_ub_4_0.6_local.pkl", try_use_gpu=True), scip_params),
 
-        # EcoleSolver(GnnObserver("uc_hetrogeneous_5_1_sb_1_extended.pkl", try_use_gpu=True, feature_observer=NodeBipartiteExtended(), n_tree_features=1), scip_params),
         # EcoleSolver(EntropyObserver(n_solve=20)),
         # EcoleSolver(
         #     ConditionalObservers(
