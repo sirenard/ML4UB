@@ -1,6 +1,8 @@
 import sys
 import tempfile
 
+from pyscipopt.scip import PY_SCIP_PARAMSETTING
+
 from branching import BoundBranching
 import ecole
 
@@ -67,15 +69,16 @@ def configure(model: pyscipopt.Model, branching_policy="vanillafullstrong", esti
     #model.setParam("presolving/maxrestarts", 0)
 
 
-    branchrule = BoundBranching(estimator_function)
-    model.includeBranchrule(
-        branchrule=branchrule,
-        name="boundbranch", # name of the branching rule
-        desc="",           # description of the branching rule
-        priority=100000,   # priority: set to this to make it default
-        maxdepth=0,       # maximum depth up to which it will be used, or -1 for no restriction
-        maxbounddist=1
-    )
+    if branching_policy == "boundbranch":
+        branchrule = BoundBranching(estimator_function)
+        model.includeBranchrule(
+            branchrule=branchrule,
+            name="boundbranch", # name of the branching rule
+            desc="",           # description of the branching rule
+            priority=100000,   # priority: set to this to make it default
+            maxdepth=0,       # maximum depth up to which it will be used, or -1 for no restriction
+            maxbounddist=1
+        )
 
     model.setParam(f"branching/{branching_policy}/priority", 9999999)
 

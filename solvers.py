@@ -4,6 +4,7 @@ import time
 import ecole
 import numpy as np
 import pyscipopt
+from pyomo.common.dependencies import random
 
 import utils
 from environments import HistoryBranchingEnvironment
@@ -135,14 +136,42 @@ class ClassicSolver(Solver):
         super().__init__()
         self.model = pyscipopt.Model()
         self.branching_policy = branching_policy
-        self.configure(**kwargs)
-        self.model.setParams(scip_params)
+        self.scip_params = scip_params
+        self.configure_args = kwargs
+
 
     def configure(self, **kwargs):
         utils.configure(self.model, branching_policy=self.branching_policy, **kwargs)
+        self.model.setParams(self.scip_params)
+
+
 
     def solve(self, path: str):
+        self.model = pyscipopt.Model()
+        self.configure(**self.configure_args)
+
         self.model.readProblem(path)
+
+
+        if self.branching_policy == "boundbranch":
+            predicted_upper_bound = utils.get_objval_from_existing_model(self.model)
+            alpha = 0.0
+            m = 99999999
+            obj = 0
+            for var in self.model.getVars():
+                obj += var.getObj() * var
+
+
+            x1 = self.model.addVar("choseBound_1", vtype="B")
+            x2 = self.model.addVar("choseBound_2", vtype="B")
+
+
+            self.model.addCons(obj >= (1-alpha)*predicted_upper_bound*x1 - m*(1-x1))
+            self.model.addCons(obj <= (1+alpha)*predicted_upper_bound*x2 + m*(1-x2))
+
+            #self.model.addCons(obj <= (1-alpha)*predicted_upper_bound*(1-x1) + m*x1)
+            #self.model.addCons(obj >= (1+alpha)*predicted_upper_bound*(1-x2) - m*x2)
+
         self.model.optimize()
 
     def __str__(self):

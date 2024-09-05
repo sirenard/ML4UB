@@ -9,14 +9,11 @@ import numpy as np
 import pyscipopt
 import torch
 from ecole.core.observation import NodeBipartite
-from sympy.integrals.manualintegrate import trig_rewriter
 
 import reward
 import utils
 from environments import HistoryBranchingEnvironment
 from model import load_policy, get_device
-from mpi import MpiPool
-from ranking_model import RankSVM
 
 
 class Observer:
