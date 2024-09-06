@@ -3,6 +3,7 @@ import math
 import pickle
 import tempfile
 import os
+import time
 
 import ecole
 import numpy as np

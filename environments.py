@@ -33,6 +33,15 @@ class HistoryBranchingEnvironment(ecole.environment.Environment):
     __Dynamics__ = SimpleBranchingDynamics
     __DefaultObservationFunction__ = ecole.observation.NodeBipartite
 
+    def reset(self, *dynamics_args, **dynamics_kwargs):
+        res = super().reset(*dynamics_args, **dynamics_kwargs)
+        self.history = []
+        return res
+
+    def step(self, *dynamics_args, **dynamics_kwargs):
+        res = super().step(*dynamics_args, **dynamics_kwargs)
+        self.history.append(dynamics_args[0])
+        return res
 
 
 class SimpleConfiguringDynamics(ecole.dynamics.ConfiguringDynamics):
@@ -53,6 +62,7 @@ class SimpleBranching(ecole.environment.Environment):
     def reset(self, *dynamics_args, **dynamics_kwargs):
         res = super().reset(*dynamics_args, **dynamics_kwargs)
         done = res[3]
+        self.history = []
         if done:
             model = self.model.as_pyscipopt()
             self.observation_function.finish(model)
