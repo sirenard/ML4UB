@@ -304,7 +304,7 @@ class LiftedObserver(Observer):
         for i in range(len(prob_indexes)):
             r, _ = pipes[i]
 
-            # print("Child done")
+            # print("Childbrut_force_score done")
             r = os.fdopen(r, "rb")
             str = r.read()
             d = pickle.loads(str)

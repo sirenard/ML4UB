@@ -5,8 +5,9 @@ import numpy as np
 
 import torch
 
-from AcsObserver import acs_score, sb_score
+from AcsObserver import sb_score, _acs_score
 from FixedObserver import FixedObserver
+from Mcts import mcts_score, brut_force_score
 from model import train
 from evaluation_tools import evaluate_solvers
 from observer import LiftedObserver, StrongBranching, GnnObserver, SVMObserver, LinearObserver, EntropyObserver, \
@@ -28,7 +29,6 @@ if __name__ == '__main__':
     scip_params = {
         "estimation/method": "c",
         "estimation/completiontype": "m",
-        "nodeselection/dfs/stdpriority": 1073741823,
         # "limits/nodes":1000,
         "limits/time": 300,
     }
@@ -37,7 +37,8 @@ if __name__ == '__main__':
         ClassicSolver("relpscost", scip_params),
         #ClassicSolver("pscost", scip_params),
         EcoleSolver(FixedObserver(scip_params), scip_params),
-        EcoleSolver(FixedObserver(scip_params, score_function=acs_score), scip_params),
+        EcoleSolver(FixedObserver(scip_params, score_function=_acs_score), scip_params),
+        #EcoleSolver(FixedObserver(scip_params, score_function=brut_force_score), scip_params),
     ]
 
 

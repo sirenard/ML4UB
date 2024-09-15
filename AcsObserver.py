@@ -1,5 +1,7 @@
 import os
 import pickle
+import tempfile
+from itertools import product
 
 import ecole
 import numpy as np
@@ -7,9 +9,10 @@ import random
 
 import pyscipopt
 
+import utils
 from FixedObserver import FixedObserver
 from environments import HistoryBranchingEnvironment
-from observer import GnnObserver, StrongBranching
+from observer import GnnObserver, StrongBranching, Observer
 from solvers import EcoleSolver, ClassicSolver
 
 
@@ -135,7 +138,9 @@ class AntColonySystem:
         return self.best_solution, self.best_cost
 
 
-def acs_score(instance_path):
+def get_acs_score_fct(num_ants = 10, num_iterations = 30, alpha = 0.575, beta = 4, evaporation_rate = 0.1):
+    return lambda path: _acs_score(path, num_ants, num_iterations, alpha, beta, evaporation_rate)
+def _acs_score(instance_path, num_ants = 10, num_iterations = 30, alpha = 4, beta = 2, evaporation_rate = 0.5):
     solver = ClassicSolver("relpscost")
     solver.solve(instance_path)
 
@@ -155,44 +160,22 @@ def acs_score(instance_path):
 
     def distance(i, j):
 
+        if i==len(variables):
+            return dists[j]
         if j==len(variables):
-            return 1
+            return dists[i]
 
         return dists[j]
 
-        var1 = m.getTransformedVar(variables[i])
-        var2 = m.getTransformedVar(variables[j])
-
-        s1 = m.getVarPseudocostScore(var1, sol[variables[i]])
-        s2 = m.getVarPseudocostScore(var2, sol[variables[j]])
-        dist = abs(s1 - s2)
-
-        return dist if dist!=0 else 1
-
-    scip_params = {
-        "estimation/method": "c",
-        "estimation/completiontype": "m",
-        "nodeselection/dfs/stdpriority": 1073741823,
-        # "limits/nodes":1000,
-        "limits/time": 300,
-    }
-
     def cost_function(solution):
         """Example cost function (e.g., sum of distances for TSP)"""
-        solver = EcoleSolver(FixedObserver(scip_params,
+        solver = EcoleSolver(FixedObserver({},
                                            score_function= lambda path: {m.getTransformedVar(variables[j]).name:-i for i,j in zip(range(len(variables)),solution[1:])} ),
-                             scip_params
+
                              )
         solver.solve(instance_path)
         return solver["nnodes"]
 
-
-    # Parameters
-    num_ants = 10
-    num_iterations = 30
-    alpha = 4  # Pheromone importance
-    beta = 2  # Heuristic importance
-    evaporation_rate = 0.5
     pheromone_deposit = nnodes
 
     problem_size = len(variables) + 1
@@ -235,3 +218,43 @@ def sb_score(instance_path):
 
     return scores
 
+if __name__ == "__main__":
+    instances = ecole.instance.CombinatorialAuctionGenerator( n_items=100, n_bids=500)
+    instances.seed(12)
+    #next(instances)
+
+
+    output_control = utils.OutputControl()
+    prob_file = tempfile.NamedTemporaryFile(suffix=".lp", dir="tmp")
+
+    output_control.mute()
+    next(instances).as_pyscipopt().writeProblem(prob_file.name)
+    output_control.unmute()
+
+    alpha_values = np.linspace(0.1, 2.0, 5)
+    beta_values = np.linspace(1, 5, 5)
+    rho_values = np.linspace(0.1, 0.9, 5)
+
+    best_params = None
+    best_performance = float('inf')
+
+    for alpha, beta, rho in product(alpha_values, beta_values, rho_values):
+        solver = EcoleSolver(FixedObserver({},
+                                           get_acs_score_fct(alpha=alpha, beta=beta, evaporation_rate=rho),)
+                             )
+
+        solver.solve(prob_file.name)
+
+
+        performance = solver["nnodes"]
+
+        print(f"{alpha},{beta},{rho}: {performance}. Best so far: {best_performance}")
+
+        if performance < best_performance:
+            best_performance = performance
+            best_params = (alpha, beta, rho)
+
+    print(f"Best: {best_params}, {best_performance}")
+
+    prob_file.close()
+    # Best: (4, 4.0, 0.1), 50
