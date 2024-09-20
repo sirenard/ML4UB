@@ -125,6 +125,7 @@ class AntColonySystem:
                 r = os.fdopen(r, "rb")
                 str = r.read()
                 (solution, cost) = pickle.loads(str)
+                ants_solutions.append((solution, cost))
                 r.close()
                 if cost < round_best:
                     round_best = cost
@@ -133,7 +134,7 @@ class AntColonySystem:
                     self.best_solution = solution
 
             self.update_pheromone(ants_solutions)
-            print(f"{iteration+1}/{self.num_iterations}: {self.best_cost}, round: {round_best}")
+            # print(f"{iteration+1}/{self.num_iterations}: {self.best_cost}, round: {round_best}")
 
         return self.best_solution, self.best_cost
 
@@ -176,7 +177,8 @@ def _acs_score(instance_path, num_ants = 10, num_iterations = 30, alpha = 4, bet
         solver.solve(instance_path)
         return solver["nnodes"]
 
-    pheromone_deposit = nnodes
+    #pheromone_deposit = nnodes
+    pheromone_deposit = 1000
 
     problem_size = len(variables) + 1
     # Create the Ant Colony System
@@ -237,6 +239,10 @@ if __name__ == "__main__":
 
     best_params = None
     best_performance = float('inf')
+
+    solver = EcoleSolver(StrongBranching())
+    solver.solve(prob_file.name)
+    print(f"SB: {solver["nnodes"]}")
 
     for alpha, beta, rho in product(alpha_values, beta_values, rho_values):
         solver = EcoleSolver(FixedObserver({},

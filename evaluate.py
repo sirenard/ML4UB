@@ -5,7 +5,8 @@ import numpy as np
 
 import torch
 
-from AcsObserver import sb_score, _acs_score
+from ACS import ACSObserer
+from AcsObserver import sb_score, _acs_score, get_acs_score_fct
 from FixedObserver import FixedObserver
 from Mcts import mcts_score, brut_force_score
 from model import train
@@ -19,10 +20,10 @@ from uc import UcigGenerator
 
 
 if __name__ == '__main__':
-    instances = ecole.instance.CombinatorialAuctionGenerator( n_items=100, n_bids=500)
+    instances = ecole.instance.CombinatorialAuctionGenerator( n_items=300, n_bids=1500)
     #instances = ecole.instance.SetCoverGenerator(n_rows=1000, n_cols=1000)
     #instances = UcigGenerator("instances")
-    instances.seed(12)
+    instances.seed(13)
 
     n_instances = 10
 
@@ -34,10 +35,21 @@ if __name__ == '__main__':
     }
 
     solvers = [
+        #ClassicSolver("vanillafullstrong", scip_params),
         ClassicSolver("relpscost", scip_params),
-        #ClassicSolver("pscost", scip_params),
+        # EcoleSolver(StrongBranching(), scip_params),
+        # EcoleSolver(
+        #     ACSObserer(
+        #         alpha=1.525,
+        #         beta=5,
+        #         evaporation_rate=0.1,
+        #         pheromone_deposit=1000,
+        #         num_iterations=3
+        #     ), scip_params)
+
+        ClassicSolver("pscost", scip_params),
         EcoleSolver(FixedObserver(scip_params), scip_params),
-        EcoleSolver(FixedObserver(scip_params, score_function=_acs_score), scip_params),
+        # EcoleSolver(FixedObserver(scip_params, score_function=get_acs_score_fct(alpha=0.1, beta=4, evaporation_rate=0.5)), scip_params),
         #EcoleSolver(FixedObserver(scip_params, score_function=brut_force_score), scip_params),
     ]
 
