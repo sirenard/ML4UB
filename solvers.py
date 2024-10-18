@@ -4,6 +4,7 @@ import time
 import ecole
 import numpy as np
 import pyscipopt
+from sympy.abc import lamda
 
 import utils
 from environments import HistoryBranchingEnvironment
@@ -11,21 +12,24 @@ from observer import Observer
 
 
 class Solver:
-    def __init__(self):
+    def __init__(self, config_function=None):
         self.model: pyscipopt.Model = None
+        self.config_function = config_function
 
     def solve(self, path: str):
         raise NotImplementedError
 
     def configure(self):
-        return
+        if self.config_function is not None:
+            self.config_function(self.model)
 
     def __getitem__(self, item):
         match item:
             case "time":
                 return self.model.getSolvingTime()
             case "nnodes":
-                return self.model.getNNodes()
+                # return self.model.getNNodes()
+                return self.model.getNTotalNodes()
             case "obj":
                 return self.model.getObjVal()
             case "gap":
@@ -39,8 +43,8 @@ class Solver:
 class EcoleSolver(Solver):
 
     def __init__(self, score_observer: Observer, scip_params={}, additional_observers=[], before_start_callbacks=[],
-                 before_action_callbacks=[]):
-        super().__init__()
+                 before_action_callbacks=[], *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.observer_index = 0
         self.observers = [score_observer, *additional_observers]
         self.env: ecole.environment = HistoryBranchingEnvironment(
@@ -79,6 +83,7 @@ class EcoleSolver(Solver):
         t = time.time()
         observations, action_set, _, done, info = self.env.reset(instance)
         self.model = instance.as_pyscipopt()
+        self.configure()
 
         nb_nodes = info["nb_nodes"]
         while not done:
@@ -131,8 +136,8 @@ class EcoleSolver(Solver):
 
 
 class ClassicSolver(Solver):
-    def __init__(self, branching_policy, scip_params={}):
-        super().__init__()
+    def __init__(self, branching_policy, scip_params={}, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.model = pyscipopt.Model()
         self.branching_policy = branching_policy
         self.configure()
@@ -140,6 +145,7 @@ class ClassicSolver(Solver):
 
     def configure(self):
         utils.configure(self.model, branching_policy=self.branching_policy)
+        super().configure()
 
     def solve(self, path: str):
         self.model.readProblem(path)

@@ -4,6 +4,7 @@ import tempfile
 
 import numpy as np
 
+import OutputControl
 import utils
 from solvers import Solver
 import matplotlib
@@ -92,7 +93,7 @@ class Data:
 def evaluate_solvers(solvers: [Solver], instances, n_instances, metrics):
     print(f"{'Instance':<15}" + "".join([f"{str(solver):<{15*len(metrics)}}" for solver in solvers]))
     print(f"{'':<15}" + len(solvers)*("".join([f"{metric:<15}" for metric in metrics])))
-    output_control = utils.OutputControl()
+    output_control = OutputControl.OutputControl()
 
     data = np.zeros((n_instances, len(solvers), len(metrics)))
 

@@ -11,6 +11,7 @@ import torch
 from ecole.core.observation import NodeBipartite
 from sympy.integrals.manualintegrate import trig_rewriter
 
+import OutputControl
 import utils
 from model import load_policy, get_device
 
@@ -111,7 +112,7 @@ class EntropyObserver(Observer):
     def get_entropy(self, model):
         prob_file = tempfile.NamedTemporaryFile(suffix=".lp", dir="tmp")
         # m = pyscipopt.Model(sourceModel=model, globalcopy=False)
-        output = utils.OutputControl()
+        output = OutputControl.OutputControl()
         output.mute()
         model.writeProblem(prob_file.name)
         output.unmute()
@@ -512,7 +513,7 @@ class DistObserver(Observer):
         scores = []
 
         prob_file = tempfile.NamedTemporaryFile(suffix=".lp", dir="tmp")
-        output = utils.OutputControl()
+        output = OutputControl.OutputControl()
         output.mute()
         pyscipopt_model.writeProblem(prob_file.name, trans=True)
         output.unmute()

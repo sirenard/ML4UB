@@ -1,25 +1,10 @@
-import sys
 import ecole
 
 import pyscipopt
 
-
-class OutputControl:
-    def __init__(self):
-        self.stdout = sys.stdout
-        self.stderr = sys.stderr
-        self.trash = open("/dev/null", "w")
-
-    def mute(self):
-        sys.stdout = self.trash
-        sys.stderr = self.trash
-
-    def unmute(self):
-        sys.stdout = self.stdout
-        sys.stderr = self.stderr
-
-    def __del__(self):
-        self.trash.close()
+from Event import MyEvent
+from OutputControl import OutputControl
+from Separator import MySperator
 
 
 def get_ecole_model_from_file(path):
@@ -39,8 +24,10 @@ def configure(model: pyscipopt.Model, branching_policy="vanillafullstrong"):
     model.setParam("randomization/permutationseed", 1)
     model.setParam("display/verblevel", 0)
 
-    model.setParam("separating/maxrounds", 0)
-    model.setParam("presolving/maxrestarts", 0)
+    # model.setParam("separating/maxrounds", 0)
+    # model.setParam("presolving/maxrestarts", 0)
+
+    # model.includeEventhdlr(MyEvent(), "myevent", "myevent")
 
     model.setParam(f"branching/{branching_policy}/priority", 9999999)
 
