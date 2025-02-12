@@ -1,13 +1,12 @@
 import argparse
 import pickle
 
-import torch
+from boundml.evaluation_tools import evaluate_solvers
+from observer import LiftedObserver
+from boundml.observers import StrongBranching, GnnObserver
+from boundml.solvers import *
 
-from evaluation_tools import evaluate_solvers
-from observer import LiftedObserver, StrongBranching, GnnObserver, AccuracyObserver
-from solvers import *
-
-from uc import UcigGenerator
+from ucig_generator import UcigGenerator
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

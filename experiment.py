@@ -1,10 +1,12 @@
 import pickle
 
 import numpy as np
-from scipy.stats import ttest_ind
+from scipy.stats import mannwhitneyu
+import boundml.evaluation_tools as evaluation_tools
+from boundml.evaluation_tools import Data
 
-from evaluation_tools import Data
-
+import sys
+sys.modules['evaluation_tools'] = evaluation_tools # needed for old pkl files
 
 def sgmean(xs: np.array, s: float) -> float:
     k = xs.size
@@ -15,8 +17,8 @@ def sgmean(xs: np.array, s: float) -> float:
 
 
 if __name__ == '__main__':
-    #data: Data = pickle.load(open("results/gpu/dataHard.pkl", "rb"))
-    data: Data = pickle.load(open("data", "rb"))
+    data: Data = pickle.load(open("results/nogpu/dataHard.pkl", "rb"))
+    # data: Data = pickle.load(open("data", "rb"))
     #data.remove_solver("GNN(uc_5_1_ub_1_0.6_local.pkl)")
     #data.remove_solver("GNN(uc_5_1_ub_2_0.6_local.pkl)")
     #data.remove_solver("GNN(uc_5_1_ub_4_0.6_local.pkl)")
@@ -24,6 +26,7 @@ if __name__ == '__main__':
     #, data = data.split_instances_over("gap", lambda g: g==0)
 
     metrics = data.metrics
+    # metrics.remove("obj")
 
     print(f"{'name':<40}" + "".join([f"{n:<11}{f"{'wins':<11}" if n == "time" else ""}" for n in metrics]))
 
@@ -64,11 +67,25 @@ if __name__ == '__main__':
     res = data.performance_profile("nnodes")
     print(res)
 
-    # sb = data.data[:,data.solvers.index("SB"),data.metrics.index("nnodes")]
-    # rb = data.data[:,data.solvers.index("relpscost"),data.metrics.index("nnodes")]
-    # lsb = data.data[:,data.solvers.index("GNN(uc_5_1_sb_0.6.pkl)"),data.metrics.index("nnodes")]
-    # llb = data.data[:,data.solvers.index("GNN(uc_5_1_ub_3_0.6_local.pkl)"),data.metrics.index("nnodes")]
-    # print(ttest_ind(rb, llb))
-    # print(ttest_ind(rb, lsb))
-    # print(ttest_ind(llb, lsb))
+    sb = data.data[:,data.solvers.index("SB"),data.metrics.index("nnodes")]
+    rb = data.data[:,data.solvers.index("relpscost"),data.metrics.index("nnodes")]
+    lsb = data.data[:,data.solvers.index("GNN(uc_5_1_sb_0.6.pkl)"),data.metrics.index("nnodes")]
+    llb = data.data[:,data.solvers.index("GNN(uc_5_1_ub_3_0.6_local.pkl)"),data.metrics.index("nnodes")]
+
+    metric = "time"
+
+    solvers = data.solvers
+    #solvers = ["SB", "relpscost", "GNN(uc_5_1_sb_0.6.pkl)", "GNN(uc_5_1_ub_3_0.6_local.pkl)"]
+
+    print(f"{'solvers':<35} &" + "&".join([f"{solver:<35}" for solver in solvers]))
+
+    for s1 in solvers:
+        d1 = data.data[:, data.solvers.index(s1), data.metrics.index(metric)]
+        print(f"{s1:<35}", end="")
+        for s2 in solvers:
+            d2 = data.data[:, data.solvers.index(s2), data.metrics.index(metric)]
+            pvalue = mannwhitneyu(d1, d2).pvalue
+            print(f"& \\pvalue{{{pvalue:<.3f}}}", end="")
+        print("\\\\")
+
 

@@ -4,7 +4,7 @@ from evaluation_tools import evaluate_solvers
 from observer import LiftedObserver, StrongBranching, GnnObserver, AccuracyObserver
 from solvers import *
 
-from uc import UcigGenerator
+from ucig_generator import UcigGenerator
 
 if __name__ == '__main__':
     instances = UcigGenerator("instances", start_at_instance=5000, days=1)
