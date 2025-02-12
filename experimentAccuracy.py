@@ -1,8 +1,9 @@
 import torch
 
-from evaluation_tools import evaluate_solvers
-from observer import LiftedObserver, StrongBranching, GnnObserver, AccuracyObserver
-from solvers import *
+from boundml.evaluation_tools import evaluate_solvers
+from observer import LiftedObserver
+from boundml.observers import StrongBranching, GnnObserver, AccuracyObserver
+from boundml.solvers import *
 
 from ucig_generator import UcigGenerator
 
