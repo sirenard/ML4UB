@@ -13,9 +13,32 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--sample_prefix", type=str, default="")
     parser.add_argument("--start_at", type=int, default=0)
+    parser.add_argument("--instances", type=str)
+    parser.add_argument("--expert", type=str)
+    parser.add_argument("--out", type=str)
+
     args = parser.parse_args()
 
-    instances = UcigGenerator("instances", tart_at_instance=args.start_at+1)
+    match args.instances:
+        case "ca":
+            instances = CombinatorialAuctionGenerator(100, 500)
+        case "cfl":
+            instances = CapacitatedFacilityLocationGenerator(100)
+        case "sc":
+            instances = SetCoverGenerator(500, 1000)
+        case "mis":
+            instances = IndependentSetGenerator(500)
+        case _:
+            raise NotImplementedError
+
+    #instances = UcigGenerator("instances", tart_at_instance=args.start_at+1)
+    instances.seed(args.start_at)
+
+
+    if args.expert == "sb":
+        expert = StrongBranching()
+    else:
+        expert = GnnObserver("uc_5_1_ub_2_0.6_local.pkl", try_use_gpu=False)
 
     expert_probability = 0.6
 
@@ -29,16 +52,19 @@ if __name__ == '__main__':
 
     generator = DatasetGenerator(
         instances,
-        expert_observer=LiftedObserver(observer=StrongBranching(), scip_params=scip_params, score_method="speedup", node_limit=100),
-        #expert_observer=LiftedObserver(observer=GnnObserver("uc_5_1_ub_2_0.6_local.pkl", try_use_gpu=False),
-        #                               scip_params=scip_params, score_method="speedup", node_limit=100,
-        #                               local=True, n_proc=24),
-        # expert_observer=StrongBranching(),
+        expert_observer=LiftedObserver(
+            observer=expert,
+            scip_params=scip_params,
+            score_method="speedup",
+            node_limit=100,
+            local=True,
+            n_proc=24
+        ),
         exploration_observer=ecole.observation.Pseudocosts(),
         expert_probability=expert_probability,
         scip_params=scip_params,
         )
 
-    generator.generate(f"uc_5_1_ub_1{expert_probability}", max_instances=100, sample_prefix=args.sample_prefix)
+    generator.generate(f"{args.out}_{expert_probability}", max_instances=100, sample_prefix=args.sample_prefix)
 
 

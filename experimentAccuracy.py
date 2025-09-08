@@ -22,42 +22,42 @@ if __name__ == '__main__':
     acc_observers = [
         AccuracyObserver(
             StrongBranching(),
-            GnnObserver("uc_5_1_sb_0.6.pkl", try_use_gpu=False)
+            GnnObserver("models/uc_5_1_sb_0.6.pkl", try_use_gpu=False)
         ),
         AccuracyObserver(
-            LiftedObserver(GnnObserver("uc_5_1_ub_1_0.6_local.pkl", try_use_gpu=False), scip_params, node_limit=100,
+            LiftedObserver(GnnObserver("models/uc_5_1_ub_1_0.6_local.pkl", try_use_gpu=False), scip_params, node_limit=100,
                            local=True, n_proc=24),
-            GnnObserver("uc_5_1_ub_1_0.6_local.pkl", try_use_gpu=False),
+            GnnObserver("models/uc_5_1_ub_1_0.6_local.pkl", try_use_gpu=False),
         ),
         AccuracyObserver(
-            LiftedObserver(GnnObserver("uc_5_1_ub_2_0.6_local.pkl", try_use_gpu=False), scip_params, node_limit=100,
+            LiftedObserver(GnnObserver("models/uc_5_1_ub_2_0.6_local.pkl", try_use_gpu=False), scip_params, node_limit=100,
                            local=True, n_proc=24),
-            GnnObserver("uc_5_1_ub_2_0.6_local.pkl", try_use_gpu=False),
+            GnnObserver("models/uc_5_1_ub_2_0.6_local.pkl", try_use_gpu=False),
         ),
         AccuracyObserver(
-            LiftedObserver(GnnObserver("uc_5_1_ub_3_0.6_local.pkl", try_use_gpu=False), scip_params, node_limit=100,
+            LiftedObserver(GnnObserver("models/uc_5_1_ub_3_0.6_local.pkl", try_use_gpu=False), scip_params, node_limit=100,
                            local=True, n_proc=24),
-            GnnObserver("uc_5_1_ub_3_0.6_local.pkl", try_use_gpu=False),
+            GnnObserver("models/uc_5_1_ub_3_0.6_local.pkl", try_use_gpu=False),
         ),
         AccuracyObserver(
-            LiftedObserver(GnnObserver("uc_5_1_ub_4_0.6_local.pkl", try_use_gpu=False), scip_params, node_limit=100,
+            LiftedObserver(GnnObserver("models/uc_5_1_ub_4_0.6_local.pkl", try_use_gpu=False), scip_params, node_limit=100,
                            local=True, n_proc=24),
-            GnnObserver("uc_5_1_ub_4_0.6_local.pkl", try_use_gpu=False),
+            GnnObserver("models/uc_5_1_ub_4_0.6_local.pkl", try_use_gpu=False),
         ),
 
     ]
 
     solvers = [
         EcoleSolver(
-            GnnObserver("uc_5_1_sb_0.6.pkl", try_use_gpu=False), scip_params,
+            GnnObserver("models/uc_5_1_sb_0.6.pkl", try_use_gpu=False), scip_params,
             additional_observers=[acc_observers[0]]),
-        EcoleSolver(GnnObserver("uc_5_1_ub_1_0.6_local.pkl", try_use_gpu=False), scip_params,
+        EcoleSolver(GnnObserver("models/uc_5_1_ub_1_0.6_local.pkl", try_use_gpu=False), scip_params,
                     additional_observers=[acc_observers[1]]),
-        EcoleSolver(GnnObserver("uc_5_1_ub_2_0.6_local.pkl", try_use_gpu=False), scip_params,
+        EcoleSolver(GnnObserver("models/uc_5_1_ub_2_0.6_local.pkl", try_use_gpu=False), scip_params,
                     additional_observers=[acc_observers[2]]),
-        EcoleSolver(GnnObserver("uc_5_1_ub_3_0.6_local.pkl", try_use_gpu=False), scip_params,
+        EcoleSolver(GnnObserver("models/uc_5_1_ub_3_0.6_local.pkl", try_use_gpu=False), scip_params,
                     additional_observers=[acc_observers[3]]),
-        EcoleSolver(GnnObserver("uc_5_1_ub_4_0.6_local.pkl", try_use_gpu=False), scip_params,
+        EcoleSolver(GnnObserver("models/uc_5_1_ub_4_0.6_local.pkl", try_use_gpu=False), scip_params,
                     additional_observers=[acc_observers[4]]),
     ]
 
