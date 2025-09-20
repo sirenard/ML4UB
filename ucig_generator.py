@@ -1,11 +1,7 @@
 import math
-
-import ecole
 import egret.models.unit_commitment
-import numpy as np
 import pyomo.environ as pyo
 import pyscipopt
-from pyscipopt import *
 import egret.data.model_data as md
 import tempfile
 
@@ -165,14 +161,7 @@ class UcigGenerator:
         prob_file = tempfile.NamedTemporaryFile(suffix=".lp", dir="tmp")
 
         pyomo_model.write(prob_file.name)
-        model_ecole = ecole.scip.Model.from_file(prob_file.name)
-        prob_file.close()
-        return model_ecole
+        model = pyscipopt.Model()
+        model.readProblem(prob_file.name)
+        return model
 
-
-if __name__ == "__main__":
-    g = UcigGenerator("/home/simon/Téléchargements/ucig/instances")
-    for model in g:
-        model: pyo.ConcreteModel
-        model.write("prob.lp")
-        pass
