@@ -54,8 +54,6 @@ class LiftedBranching(ScoringBranchingStrategy):
 
                 model.setParam("limits/restarts", 1)
                 model.setParam("presolving/maxrestarts", 0)
-                model.setParam("estimation/restarts/restartpolicy", "n")
-                model.setParam("estimation/restarts/restartlimit", 0)
 
                 if self.local:
                     leaves, _, _ = model.getOpenNodes()
@@ -64,8 +62,8 @@ class LiftedBranching(ScoringBranchingStrategy):
 
                 scores[i] = 1
 
-                # node_lim = model.getNNodes() + self.node_limit
-                # model.setParam("limits/nodes", node_lim)
+                node_lim = model.getNNodes() + self.node_limit
+                model.setParam("limits/nodes", node_lim)
 
                 return scores
 
@@ -112,9 +110,6 @@ class LiftedBranching(ScoringBranchingStrategy):
 
     def reset(self, model: Model) -> None:
         self.expert.reset(model)
-        # model.setParam("branching/boundml/maxdepth", 0)
-
-
 
     def done(self, model: Model) -> None:
         self.expert.done(model)

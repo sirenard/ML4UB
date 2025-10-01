@@ -2,6 +2,7 @@
 import argparse
 
 import ecole
+import torch
 from boundml.components import EcoleComponent, StrongBranching
 from boundml.components.gnn_component import GnnBranching
 from boundml.instances import CombinatorialAuctionGenerator, CapacitatedFacilityLocationGenerator, SetCoverGenerator, \
@@ -9,15 +10,18 @@ from boundml.instances import CombinatorialAuctionGenerator, CapacitatedFacility
 from boundml.ml import BranchingDatasetGenerator
 
 from lb_component import LiftedBranching
+# from ucig_generator import UcigGenerator
 
 if __name__ == '__main__':
+    torch.set_num_threads(1)
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--sample_prefix", type=str, default="")
     parser.add_argument("--start_at", type=int, default=0)
     parser.add_argument("--instances", type=str)
     parser.add_argument("--expert", type=str)
     parser.add_argument("--out", type=str)
-    parser.add_argument("--ncpu", type=int)
+    parser.add_argument("--ncpu", type=int, required=True)
     parser.add_argument("--nodelimit", type=int, default=100)
     parser.add_argument("--maxinstances", type=int, default=100)
     parser.add_argument("--local", type=bool, default=True)
@@ -25,6 +29,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     match args.instances:
+        # case "uc":
+        #     instances = UcigGenerator("instances", start_at_instance=args.start_at, days=1)
         case "ca":
             instances = CombinatorialAuctionGenerator(100, 500)
         case "cfl":
@@ -33,19 +39,22 @@ if __name__ == '__main__':
             instances = SetCoverGenerator(500, 1000)
         case "mis":
             instances = IndependentSetGenerator(500)
+
         case _:
             raise NotImplementedError
 
-    #instances = UcigGenerator("instances", tart_at_instance=args.start_at+1)
-    instances.seed(args.start_at)
+    if args.instances != "uc":
+        instances.seed(args.start_at)
 
+    state_component = EcoleComponent(ecole.observation.NodeBipartite())
 
     if args.expert == "sb":
-        expert = StrongBranching()
+        expert = StrongBranching(True, False, True, True)
+
     else:
         expert = GnnBranching(
             f"{args.expert}.pkl",
-            feature_component = EcoleComponent(ecole.observation.NodeBipartite()),
+            feature_component = state_component,
             try_use_gpu=False
         )
 
@@ -56,8 +65,6 @@ if __name__ == '__main__':
         "estimation/completiontype": "m",
         "limits/nodes": 200,
     }
-
-    state_component = EcoleComponent(ecole.observation.NodeBipartite())
 
 
     generator = BranchingDatasetGenerator(

@@ -158,7 +158,7 @@ class UcigGenerator:
         m = ModelData(self.model_data)
 
         pyomo_model = egret.models.unit_commitment.create_CA_unit_commitment_model(m)
-        prob_file = tempfile.NamedTemporaryFile(suffix=".lp", dir="tmp")
+        prob_file = tempfile.NamedTemporaryFile(suffix=".lp")
 
         pyomo_model.write(prob_file.name)
         model = pyscipopt.Model()
