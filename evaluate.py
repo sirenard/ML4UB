@@ -1,110 +1,90 @@
+import argparse
 import pickle
-import ecole.instance
-from boundml.solvers import ClassicSolver
 
-from ucig_generator import UcigGenerator
+from boundml.evaluation import evaluate_solvers
+from boundml.solvers import DefaultScipSolver, ModularSolver
 
+from lb_component import LiftedBranching
 
+import torch
+
+from utils import get_instances, get_component
 
 if __name__ == '__main__':
-    instances = UcigGenerator("instances", start_at_instance=5000, days=1)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--instances", type=str)
+    parser.add_argument("--difficulty", type=str, choices=['easy', 'medium', 'hard'])
+    parser.add_argument("--out", type=str, default="out.pkl")
+    parser.add_argument("--n_instances", type=int, default=5)
+    parser.add_argument("--solvers", type=str, nargs="*")
+    parser.add_argument("--solvers", type=str, nargs="*")
+    parser.add_argument("--ncpu", type=int, required=True)
+    parser.add_argument("--timelimit", type=int, default=600)
+    parser.add_argument("--usegpu", action="store_true", default=False)
+    parser.add_argument("--ntorchthreads", type=int, default=None)
+    parser.add_argument("--seed", type=int, default=1212)
 
-    n_instances = 10
+    args = parser.parse_args()
+
+    seed = args.seed
+    start = 0
+    if args.instances == "cflfixed":
+        seed = 12
+        start = args.seed
+    elif args.instances == "uc":
+        start = 5000
+
+    instances = get_instances(args.instances, args.difficulty, seed, start)
+
+    if args.ntorchthreads is not None:
+        print("using ntorch threads", args.ntorchthreads)
+        torch.set_num_threads(args.ntorchthreads)
 
     scip_params = {
-        # "estimation/method": "c",
-        # "estimation/completiontype": "m",
-        "limits/time":120,
-        #"limits/nodes": 50,
-        # "branching/relpscost/maxreliable": 4,
-        # "branching/relpscost/minreliable": 4,
-        # "branching/relpscost/usesblocalinfo": True,
+        "timing/clocktype": 1,
+        "limits/time":args.timelimit,
+        'estimation/method': 'c',
+        "estimation/completiontype": "m",
+        'randomization/permutevars': True,
+        'randomization/permutationseed': args.seed,
+        'randomization/randomseedshift': args.seed,
+        'separating/maxrounds': 0,
+        'presolving/maxrestarts': 0,
     }
 
-    # policy = train("sb_normal_0.6", 0.005, 30, "sb_normal_0.6.pkl")
-    # policy = train("sb_extended_0.6", 0.005, 17, "sb_extended_0.6.pkl", n_tree_features=5)
-    # policy = train("ca_100_500_ub_1_0.6", 0.005, 20, "ca_100_500_ub_1_0.6.pkl")
-    # policy = train("ca_100_500_sb_0.6", 0.005, 20, "ca_100_500_sb_0.6.pkl")
-    # policy = train("sc_500_1000_ub_0_1_local", 0.005, 30, "sc_500_1000_ub_0_1_local.pkl")
+    import multiprocess.context as ctx
 
-    # torch.set_num_threads(1)
+    ctx._force_start_method('spawn')
 
-    # from genetic_branching import toolbox
-    # pop = pickle.load(open("best_gen2", "rb"))
+    solvers = []
 
-    # f = toolbox.compile(expr=pop)
+    if args.solvers is not None:
+        for s in args.solvers:
+            solver = DefaultScipSolver(s, scip_params)
+            solvers.append(solver)
 
-    # pop = pickle.load(open("best_gen_uc_5", "rb"))
+    use_cpus_for_lb = False
+    if args.gnn_agents is not None:
+        for agent in args.gnn_agents:
+            component = get_component(agent, args.usegpu, args.ncpu)
+            if type(component) is LiftedBranching:
+                use_cpus_for_lb = True
 
-    # f2 = toolbox.compile(expr=pop)
+            solver = ModularSolver(
+                component,
+                scip_params=scip_params,
+            )
 
-    # acc_observers = AccuracyObserver(StrongBranching(), GnnObserver("uc_5_1_sb_0.6.pkl", try_use_gpu=False))
-
-    solvers = [
-        # EcoleSolver(StrongBranching(), scip_params),
-        ClassicSolver("relpscost", scip_params),
-        # ClassicSolver("pscost", scip_params),
-        # EcoleSolver(FunctorObserver(f), scip_params),
-        # EcoleSolver(TestObserver(), scip_params),
-        # EcoleSolver(ReliabiltyBranchingFNT(eta=8), scip_params),
+            solvers.append(solver)
 
 
-        # EcoleSolver(GnnObserver("ca_100_500_sb_0.6.pkl", try_use_gpu=True), scip_params),
-        # EcoleSolver(GnnObserver("ca_100_500_ub_1_0.6.pkl", try_use_gpu=True), scip_params),
-        # EcoleSolver(GnnObserver("sb_extended_0.6.pkl", try_use_gpu=True, feature_observer=NodeBipartiteExtended(),
-        #                         n_tree_features=5), scip_params),
 
-        # EcoleSolver(GnnObserver("uc_hetrogeneous_5_1_ub_2_0.6_local.pkl", try_use_gpu=True), scip_params),
+    data = evaluate_solvers(
+        solvers,
+        instances,
+        args.n_instances,
+        ["nnodes", "time", "gap"],
+        n_cpu = args.ncpu if not use_cpus_for_lb else 1,
+    )
 
-        # EcoleSolver(GnnObserver("uc_5_1_sb_0.6.pkl", try_use_gpu=True), scip_params),
-        # EcoleSolver(GnnObserver("uc_5_1_ub_2_1_local.pkl", try_use_gpu=True), scip_params),
-        # EcoleSolver(GnnObserver("uc_5_1_ub_1_0.6_global.pkl", try_use_gpu=True), scip_params),
-        # EcoleSolver(GnnObserver("uc_5_1_ub_1_0.6_local.pkl", try_use_gpu=True), scip_params),
-        # EcoleSolver(GnnObserver("uc_5_1_ub_2_0.6_local.pkl", try_use_gpu=True), scip_params),
-        # EcoleSolver(GnnObserver("uc_5_1_ub_1_0.6_local.pkl", try_use_gpu=True), scip_params),
-        # EcoleSolver(GnnObserver("uc_5_1_ub_2_0.6_local.pkl", try_use_gpu=True), scip_params),
-        # EcoleSolver(GnnObserver("uc_5_1_ub_3_0.6_local.pkl", try_use_gpu=True), scip_params),
-        # EcoleSolver(GnnObserver("uc_5_1_ub_1_0.6_global.pkl", try_use_gpu=True), scip_params),
-        # EcoleSolver(GnnObserver("uc_5_1_ub_2_0.6_global.pkl", try_use_gpu=True), scip_params),
-        # EcoleSolver(GnnObserver("uc_5_1_ub_1_0.6_local.pkl", try_use_gpu=True), scip_params),
-
-        # EcoleSolver(GnnObserver("uc_5_1_ub_3_0.6_local.pkl", try_use_gpu=True), scip_params),
-
-        # EcoleSolver(EntropyObserver(n_solve=20)),
-        # EcoleSolver(
-        #     ConditionalObservers(
-        #     [GnnObserver("uc_hetrogeneous_5_1_ub_2_1_local.pkl", try_use_gpu=True), GnnObserver("uc_hetrogeneous_5_1_sb_1.pkl", try_use_gpu=True)],
-        #     [lambda m: m.getNNodes()<=200, lambda m: True]
-        #     )
-        # ),
-
-        # EcoleSolver(
-        #     LiftedObserver(StrongBranching(), scip_params, pool, node_limit=100, score_method="speedup", local=True),
-        #     scip_params
-        # ),
-        # EcoleSolver(
-        #     LiftedObserver(GnnObserver("uc_hetrogeneous_5_1_sb_1.pkl", try_use_gpu=False), scip_params, pool,
-        #                    node_limit=100, score_method="speedup", local=True, n_proc=2),
-        #     scip_params
-        # ),
-        # EcoleSolver(
-        #     LiftedObserver(GnnObserver("uc_hetrogeneous_5_1_ub_1_1_local.pkl", try_use_gpu=False), scip_params, pool,
-        #                    node_limit=100, score_method="speedup", local=True, n_proc=2),
-        #     scip_params
-        # ),
-        # EcoleSolver(
-        #     LiftedObserver(GnnObserver("ca_100_500_ub_1_0.6.pkl", try_use_gpu=False), scip_params,
-        #                    node_limit=100, score_method="speedup", local=True, n_proc=20),
-        #     scip_params
-        # ),
-    ]
-
-
-    metrics = ["nnodes", "time", "gap"]
-
-    data = evaluate_solvers(solvers, instances, n_instances, metrics)
-    pickle.dump(data, open("data", "wb"))
-    # data = pickle.load(open("data", "rb"))
-
-    # data.performance_profile(metric="time")
-    # data.performance_profile(metric="nnodes")
+    pickle.dump(data, open(args.out, "wb"))
