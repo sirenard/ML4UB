@@ -1,19 +1,12 @@
 import argparse
 
-import ecole
-import numpy as np
 import torch
-from boundml.components.gnn_component import GnnBranching
 
 from boundml.evaluation import evaluate_solvers
-from boundml.instances import CombinatorialAuctionGenerator
 
-from boundml.components import StrongBranching, AccuracyBranching, EcoleComponent
+from boundml.components import AccuracyBranching
 from boundml.solvers import *
-from pyomo.core import components
 
-from lb_component import LiftedBranching
-from ucig_generator import UcigGenerator
 from utils import get_instances, get_component
 
 if __name__ == '__main__':
@@ -21,17 +14,29 @@ if __name__ == '__main__':
     import multiprocess.context as ctx
     ctx._force_start_method('spawn')
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--instances", type=str)
+    parser = argparse.ArgumentParser(description=
+        """
+        Solve the instances using the model strategy.
+        At each decision, compute expert scores and store how the model's decision is ranked according to expert scores.
+        After solving all the instances, report the Acc@1 Acc@5 Acc@10 in percent.
+        """
+    )
+    parser.add_argument("--instances", type=str, choices=["ca", "cfl", "sc", "mis", "uc"])
     parser.add_argument("--n_instances", type=int, default=5)
     parser.add_argument("--timelimit", type=int, default=600)
     parser.add_argument("--seed", type=int, default=1212)
-    parser.add_argument("--ncpu", type=int, default=24)
+    parser.add_argument("--ncpu", type=int, default=24, help="Number of CPUs to use for LB components")
     parser.add_argument(
         '-p', '--solver_pair',
         nargs=2,
         action='append',
         required=True,
+        help="""Pair of solvers: expert, model. The format is the same one as used for evaluation: 
+        sb -> Strong Branching
+        lb_sb -> Lifted Branching of strong branching
+        lb_path -> Lifted branching, using GNN branching using model in `path`
+        path -> GNN branching using model in `path`
+        """
     )
     args = parser.parse_args()
 
@@ -39,14 +44,14 @@ if __name__ == '__main__':
     start = 0
     if args.instances == "cflfixed":
         seed = 12
-        start = args.start_at
+        start = seed
     elif args.instances == "uc":
         start = 5000
 
     instances = get_instances(args.instances, "easy", seed, start)
 
     scip_params = {
-        "timing/clocktype": 1,
+        # "timing/clocktype": 1,
         "limits/time": args.timelimit,
         'estimation/method': 'c',
         "estimation/completiontype": "m",
@@ -64,7 +69,7 @@ if __name__ == '__main__':
     for model_name in args.solver_pair:
         expert = get_component(model_name[0], usegpu=False, ncpu=args.ncpu)
         model = get_component(model_name[1], usegpu=False, ncpu=args.ncpu)
-        components.append(AccuracyBranching(model, expert))
+        components.append(AccuracyBranching(expert, model))
 
 
 

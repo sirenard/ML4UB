@@ -22,35 +22,44 @@ def get_instances(name: str, difficulty: str, seed = None, start = None):
             kwargs = {"easy": {"n_items": 100, "n_bids": 500}, "medium": {"n_items": 200, "n_bids": 1000},
                       "hard": {"n_items": 300, "n_bids": 1500}, }[difficulty]
             instances = CombinatorialAuctionGenerator(**kwargs)
+            instances.seed(seed)
         case "cfl":
             kwargs = {"easy": {"n_customers": 100}, "medium": {"n_customers": 200}, "hard": {"n_customers": 400}, }[
                 difficulty]
             instances = CapacitatedFacilityLocationGenerator(**kwargs)
+            instances.seed(seed)
         case "cflfixed":
             kwargs = {"easy": {"n_customers": 100}, "medium": {"n_customers": 200}, "hard": {"n_customers": 400}, }[
                 difficulty]
             instances = CapacitatedFacilityLocationGenerator(**kwargs, fixed_facilities=True)
+            instances.seed(12)
         case "sc":
             kwargs = {"easy": {"n_rows": 500, "n_cols": 1000}, "medium": {"n_rows": 1000, "n_cols": 1000},
                       "hard": {"n_rows": 2000, "n_cols": 1000}, }[difficulty]
             instances = SetCoverGenerator(**kwargs)
+            instances.seed(seed)
         case "mis":
             kwargs = {"easy": {"n_nodes": 500}, "medium": {"n_nodes": 1000}, "hard": {"n_nodes": 1500}, }[
                 difficulty]
             instances = IndependentSetGenerator(**kwargs)
+            instances.seed(seed)
         case _:
             raise NotImplementedError
 
-    if name != "uc" and seed is not None:
-        instances.seed(seed)
-
-        if start is not None:
-            for _ in range(start):
-                next(instances)
+    if name != "uc" and start is not None:
+        for _ in range(start):
+            next(instances)
 
     return instances
 
 def get_component(name: str, usegpu=True, ncpu=12):
+    """
+    Get a branching component from a string
+    sb -> Strong Branching
+    lb_sb -> Lifted Branching of strong branching
+    lb_path -> Lifted branching, using GNN branching using model in `path`
+    path -> GNN branching using model in `path`
+    """
     if name == "sb":
         return StrongBranching(False, True, True, True)
 

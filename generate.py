@@ -5,14 +5,10 @@ import ecole
 import torch
 from boundml.components import EcoleComponent, StrongBranching
 from boundml.components.gnn_component import GnnBranching
-from boundml.instances import CombinatorialAuctionGenerator, CapacitatedFacilityLocationGenerator, SetCoverGenerator, \
-    IndependentSetGenerator
 from boundml.ml import BranchingDatasetGenerator
 
 from lb_component import LiftedBranching
 from utils import get_instances
-
-# from ucig_generator import UcigGenerator
 
 if __name__ == '__main__':
     torch.set_num_threads(1)
@@ -20,13 +16,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--sample_prefix", type=str, default="")
     parser.add_argument("--start_at", type=int, default=0)
-    parser.add_argument("--instances", type=str)
-    parser.add_argument('--lsb', action='store_true', default=False)
-    parser.add_argument("--expert", type=str)
-    parser.add_argument("--out", type=str)
-    parser.add_argument("--ncpu", type=int, required=True)
-    parser.add_argument("--nodelimit", type=int, default=100)
-    parser.add_argument("--maxinstances", type=int, default=100)
+    parser.add_argument("--instances", type=str, choices=["ca", "cfl", "sc", "mis", "uc"])
+    parser.add_argument('--lsb', action='store_true', default=False, help="Whether to use SB as expert")
+    parser.add_argument("--expert", type=str, help="Which expert to use, if sb -> LB[SB] is the expert. If path -> LB[GNN(path)] is the expert")
+    parser.add_argument("--out", type=str, help="Folder to save the results to")
+    parser.add_argument("--ncpu", type=int, required=True, help="Number of CPU cores to use for LB component")
+    parser.add_argument("--nodelimit", type=int, default=100, help="Additional limits used while computing LB scores")
+    parser.add_argument("--maxinstances", type=int, default=100, help="Maximum number of instances to use")
     parser.add_argument("--local", type=bool, default=True)
 
     args = parser.parse_args()
@@ -35,7 +31,7 @@ if __name__ == '__main__':
     scip_params = {
         "estimation/method": "c",
         "estimation/completiontype": "m",
-        "limits/nodes": 500,
+        "limits/nodes": 200,
         'randomization/permutevars': True,
         'randomization/permutationseed': seed,
         'randomization/randomseedshift': seed,
@@ -44,8 +40,7 @@ if __name__ == '__main__':
     }
 
     start=0
-    if args.instances == "cflfixed":
-        seed = 12
+    if args.instances in ["cflfixed", "uc"]:
         start=args.start_at
 
     instances = get_instances(args.instances, "easy", seed, start)
