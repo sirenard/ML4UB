@@ -5,7 +5,7 @@ from boundml.instances import IndependentSetGenerator, SetCoverGenerator, Capaci
     CombinatorialAuctionGenerator
 
 from lb_component import LiftedBranching
-from ucig_generator import UcigGenerator
+# from ucig_generator import UcigGenerator
 
 
 def get_instances(name: str, difficulty: str, seed = None, start = None):

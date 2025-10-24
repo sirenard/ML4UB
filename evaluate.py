@@ -12,7 +12,7 @@ from utils import get_instances, get_component
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Solve instances using different solvers to compare them.")
-    parser.add_argument("--instances", type=str, choices=["ca", "cfl", "sc", "mis", "uc"])
+    parser.add_argument("--instances", type=str, choices=["ca", "cfl", "uc"])
     parser.add_argument("--difficulty", type=str, choices=['easy', 'medium', 'hard'])
     parser.add_argument("--out", type=str, default="out.pkl", help="Where to save all the data to compute reports later")
     parser.add_argument("--n_instances", type=int, default=5, help="Number of instances to solve")

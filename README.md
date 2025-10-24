@@ -49,7 +49,7 @@ Solve instances using different solvers to compare them.
 
 options:
   -h, --help            show this help message and exit
-  --instances {ca,cfl,sc,mis,uc}
+  --instances {ca,cfl,uc}
   --difficulty {easy,medium,hard}
   --out OUT             Where to save all the data to compute reports later
   --n_instances N_INSTANCES
@@ -99,7 +99,7 @@ print(r)
 To compute the Acc@n accuracies of the model, the file `accuracy.py` can be used.
 
 ```
-usage: accuracy.py [-h] [--instances {ca,cfl,sc,mis,uc}] [--n_instances N_INSTANCES] [--timelimit TIMELIMIT] [--seed SEED] [--ncpu NCPU] -p SOLVER_PAIR SOLVER_PAIR
+usage: accuracy.py [-h] [--instances {ca,cfl,uc}] [--n_instances N_INSTANCES] [--timelimit TIMELIMIT] [--seed SEED] [--ncpu NCPU] -p SOLVER_PAIR SOLVER_PAIR
 
 Solve the instances using the model strategy. At each decision, compute expert scores and store how the model's decision is ranked according to expert scores. After solving all the instances, report the Acc@1 Acc@5 Acc@10 in
 percent.
@@ -115,3 +115,9 @@ options:
                         Pair of solvers: expert, model. The format is the same one as used for evaluation: sb -> Strong Branching lb_sb -> Lifted Branching of strong branching lb_path -> Lifted branching, using GNN branching
                         using model in `path` path -> GNN branching using model in `path`
 ```
+
+## Models
+
+The models used for the paper's experiments are in the folder `models`. One sub folder exists for each type of instances.
+A file named `ca_llb_1.pkl` is the model `LLB^1` presented in the paper for ca instances. A file named `ca_lsb.pkl` is the 
+model presented as `LSB` in the paper.
